@@ -1,0 +1,15 @@
+version "0.0.1"
+
+option go_namespace = "rpc"
+
+struct request {
+    userId string
+}
+
+struct response {
+    data []byte
+}
+
+service service {
+    getUser(request request) response
+}
