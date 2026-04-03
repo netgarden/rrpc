@@ -11,6 +11,7 @@ const (
 	TYPE
 	STRING
 
+	NAME
 	VERSION
 	OPTION
 	STRUCT
@@ -39,6 +40,7 @@ var tokens = map[Token]string{
 	TYPE:       "TYPE",
 	STRING:     "STRING",
 
+	NAME:    "NAME",
 	VERSION: "VERSION",
 	OPTION:  "OPTION",
 	STRUCT:  "STRUCT",

@@ -37,14 +37,22 @@ func (r *RunesReader) Read() (rune, Position, error) {
 			return 0, Position{}, err
 		}
 
-		lastRuneData := r.data[r.runePos-1]
-		pos := lastRuneData.Position
+		var pos Position
 
-		if readRune == '\n' {
-			pos.Line++
-			pos.Column = 1
+		if len(r.data) > 0 {
+
+			lastRuneData := r.data[r.runePos-1]
+			pos = lastRuneData.Position
+
+			if readRune == '\n' {
+				pos.Line++
+				pos.Column = 1
+			} else {
+				pos.Column++
+			}
+
 		} else {
-			pos.Column++
+			pos = Position{Line: 1, Column: 1}
 		}
 
 		runeData = RuneData{

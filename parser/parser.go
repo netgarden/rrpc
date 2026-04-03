@@ -2,11 +2,13 @@ package parser
 
 import (
 	"fmt"
-	def "github.com/netgarden/rrpc-def"
-	"github.com/netgarden/rrpc-def/lexer"
 	"os"
+	"path/filepath"
 	"slices"
 	"unicode"
+
+	def "github.com/netgarden/rrpc-def"
+	"github.com/netgarden/rrpc-def/lexer"
 )
 
 func New() *Parser {
@@ -14,10 +16,13 @@ func New() *Parser {
 }
 
 type Parser struct {
-	queue []*lexer.Item
+	mainFileDir string
+	currentFile string
 }
 
-func (p *Parser) Parse(filePath string) (*def.Definition, error) {
+func (p *Parser) Parse(filePath string) (*def.Module, error) {
+
+	p.mainFileDir = filepath.Dir(filePath)
 
 	toProcess := make(chan string, 500)
 	toProcess <- filePath
@@ -28,7 +33,7 @@ func (p *Parser) Parse(filePath string) (*def.Definition, error) {
 
 		processed := false
 		for _, source := range sources {
-			if source.Path == sourcePath {
+			if source.SourcePath == sourcePath {
 				processed = true
 				break
 			}
@@ -38,13 +43,22 @@ func (p *Parser) Parse(filePath string) (*def.Definition, error) {
 			continue
 		}
 
-		source, err := p.parseFile(filePath)
+		p.currentFile = sourcePath
+		source, err := p.parseFile(sourcePath)
+		p.currentFile = ""
 		if err != nil {
 			return nil, err
 		}
 
+		baseDir := filepath.Dir(sourcePath)
 		for _, include := range source.Includes {
-			toProcess <- include
+			includePath := filepath.Join(baseDir, include)
+			includePath = filepath.Clean(includePath)
+			toProcess <- includePath
+		}
+
+		if len(toProcess) == 0 {
+			close(toProcess)
 		}
 
 		sources = append(sources, source)
@@ -52,7 +66,18 @@ func (p *Parser) Parse(filePath string) (*def.Definition, error) {
 	}
 
 	processor := NewProcessor()
-	return processor.Process(sources)
+	definition, err := processor.Process(sources)
+	if err != nil {
+		return nil, err
+	}
+
+	validator := NewValidator()
+	err = validator.Validate(definition)
+	if err != nil {
+		return nil, err
+	}
+
+	return definition, nil
 }
 
 func (p *Parser) parseFile(filePath string) (*def.SourceOrigin, error) {
@@ -63,7 +88,12 @@ func (p *Parser) parseFile(filePath string) (*def.SourceOrigin, error) {
 	}
 	defer f.Close()
 
-	source := def.NewSourceOrigin(filePath)
+	relPath, err := filepath.Rel(p.mainFileDir, filePath)
+	if err != nil {
+		return nil, err
+	}
+
+	source := def.NewSourceOrigin(filePath, relPath)
 
 	lex := lexer.New(f)
 	r := lexer.NewReader(lex)
@@ -88,6 +118,9 @@ eof:
 		switch item.Token {
 		case lexer.NEWLINE:
 			continue
+		case lexer.NAME:
+			err = p.parseName(r, source)
+			break
 		case lexer.VERSION:
 			err = p.parseVersion(r, source)
 			break
@@ -117,24 +150,56 @@ eof:
 	return source, nil
 }
 
+func (p *Parser) parseName(lex *lexer.Reader, source *def.SourceOrigin) error {
+
+	ret, err := p.parseSetting(lex, source)
+	if err != nil {
+		return err
+	}
+
+	source.Name = ret
+
+	return nil
+}
+
 func (p *Parser) parseVersion(lex *lexer.Reader, source *def.SourceOrigin) error {
+
+	ret, err := p.parseSetting(lex, source)
+	if err != nil {
+		return err
+	}
+
+	source.Version = ret
+
+	return nil
+}
+
+func (p *Parser) parseSetting(lex *lexer.Reader, source *def.SourceOrigin) (string, error) {
 
 	var item *lexer.Item
 	var err error
 
 	_, err = p.readLexItem(lex, lexer.WHITESPACE)
 	if err != nil {
-		return err
+		return "", err
+	}
+
+	_, err = p.readLexItem(lex, lexer.EQ)
+	if err != nil {
+		return "", err
+	}
+
+	_, err = p.readLexItem(lex, lexer.WHITESPACE)
+	if err != nil {
+		return "", err
 	}
 
 	item, err = p.readLexItem(lex, lexer.STRING)
 	if err != nil {
-		return err
+		return "", err
 	}
 
-	source.Version = item.Literal
-
-	return nil
+	return item.Literal, nil
 }
 
 func (p *Parser) parseOption(lex *lexer.Reader, source *def.SourceOrigin) error {
@@ -222,7 +287,7 @@ func (p *Parser) parseStruct(lex *lexer.Reader, source *def.SourceOrigin) error 
 
 		var field *def.Field
 
-		field, err = p.parseField(lex)
+		field, err = p.parseField(lex, true)
 		if err != nil {
 			return err
 		}
@@ -237,8 +302,6 @@ func (p *Parser) parseStruct(lex *lexer.Reader, source *def.SourceOrigin) error 
 
 		structDef.Fields = append(structDef.Fields, field)
 		fieldNames = append(fieldNames, field.Name)
-
-		p.skipLexItem(lex, lexer.NEWLINE)
 
 	}
 
@@ -290,6 +353,8 @@ func (p *Parser) parseService(lex *lexer.Reader, source *def.SourceOrigin, annot
 			if err != nil {
 				return err
 			}
+		} else {
+			p.skipLexItem(lex, lexer.WHITESPACE, lexer.NEWLINE)
 		}
 
 		var method *def.Method
@@ -344,19 +409,26 @@ func (p *Parser) parseServiceMethod(lex *lexer.Reader) (*def.Method, error) {
 		return nil, err
 	}
 
-	inputs, err := p.parseServiceMethodParams(lex)
+	inputs, err := p.parseServiceMethodParams(lex, true)
 	if err != nil {
 		return nil, err
 	}
 	method.Inputs = inputs
 
+	p.skipLexItem(lex, lexer.WHITESPACE)
+
 	item = lex.Read()
-	if item.Token != lexer.BO {
+	if item.Token == lexer.IDENT {
+		method.Outputs = []*def.Field{
+			def.NewField("", item.Literal),
+		}
+		return method, nil
+	} else if item.Token != lexer.BO {
 		lex.Unread()
 		return method, nil
 	}
 
-	outputs, err := p.parseServiceMethodParams(lex)
+	outputs, err := p.parseServiceMethodParams(lex, false)
 	if err != nil {
 		return nil, err
 	}
@@ -365,7 +437,7 @@ func (p *Parser) parseServiceMethod(lex *lexer.Reader) (*def.Method, error) {
 	return method, nil
 }
 
-func (p *Parser) parseServiceMethodParams(lex *lexer.Reader) ([]*def.Field, error) {
+func (p *Parser) parseServiceMethodParams(lex *lexer.Reader, input bool) ([]*def.Field, error) {
 
 	var err error
 
@@ -380,14 +452,14 @@ func (p *Parser) parseServiceMethodParams(lex *lexer.Reader) ([]*def.Field, erro
 
 		if len(ret) > 0 {
 
-			p.skipLexItem(lex, lexer.WHITESPACE, lexer.NEWLINE)
+			p.skipLexItem(lex, lexer.WHITESPACE)
 
 			_, err = p.readLexItem(lex, lexer.COMMA)
 			if err != nil {
 				return nil, err
 			}
 
-			_, err = p.readLexItem(lex, lexer.WHITESPACE, lexer.NEWLINE)
+			_, err = p.readLexItem(lex, lexer.WHITESPACE)
 			if err != nil {
 				return nil, err
 			}
@@ -395,7 +467,7 @@ func (p *Parser) parseServiceMethodParams(lex *lexer.Reader) ([]*def.Field, erro
 
 		var field *def.Field
 
-		field, err = p.parseField(lex)
+		field, err = p.parseField(lex, input)
 		if err != nil {
 			return nil, err
 		}
@@ -438,24 +510,31 @@ func (p *Parser) parseInclude(lex *lexer.Reader, source *def.SourceOrigin) error
 	return nil
 }
 
-func (p *Parser) parseField(lex *lexer.Reader) (*def.Field, error) {
+func (p *Parser) parseField(lex *lexer.Reader, withName bool) (*def.Field, error) {
 
 	var item *lexer.Item
 	var err error
 
-	item, err = p.readLexItem(lex, lexer.IDENT)
-	if err != nil {
-		return nil, err
-	}
+	p.skipLexItem(lex, lexer.WHITESPACE, lexer.NEWLINE)
 
-	fieldName := item.Literal
-	if !unicode.IsLetter(rune(fieldName[0])) {
-		return nil, fmt.Errorf("field name must start with a letter, got %q", fieldName)
-	}
+	fieldName := ""
+	if withName {
 
-	_, err = p.readLexItem(lex, lexer.WHITESPACE)
-	if err != nil {
-		return nil, err
+		item, err = p.readLexItem(lex, lexer.IDENT)
+		if err != nil {
+			return nil, err
+		}
+
+		fieldName = item.Literal
+		if !unicode.IsLetter(rune(fieldName[0])) {
+			return nil, fmt.Errorf("field name must start with a letter, got %q", fieldName)
+		}
+
+		_, err = p.readLexItem(lex, lexer.WHITESPACE)
+		if err != nil {
+			return nil, err
+		}
+
 	}
 
 	item, err = p.readLexItem(lex, lexer.IDENT)
@@ -574,7 +653,15 @@ func (p *Parser) readLexItem(lex *lexer.Reader, tokens ...lexer.Token) (*lexer.I
 			tokenStr = fmt.Sprintf("%v", tokens)
 		}
 
-		return item, fmt.Errorf("expected %s, got %s, %v", tokenStr, item.Token.String(), item.Position)
+		err := fmt.Errorf(
+			"expected %s, got %s, file %s, %v",
+			tokenStr,
+			item.Token.String(),
+			p.currentFile,
+			item.Position,
+		)
+
+		return item, err
 	}
 
 	return item, nil

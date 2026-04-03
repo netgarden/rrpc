@@ -2,9 +2,10 @@ package parser
 
 import (
 	"fmt"
-	def "github.com/netgarden/rrpc-def"
 	"slices"
 	"strings"
+
+	def "github.com/netgarden/rrpc-def"
 )
 
 func NewProcessor() *Processor {
@@ -13,30 +14,35 @@ func NewProcessor() *Processor {
 
 type Processor struct{}
 
-func (p *Processor) Process(sources []*def.SourceOrigin) (*def.Definition, error) {
+func (p *Processor) Process(sources []*def.SourceOrigin) (*def.Module, error) {
 
 	var err error
 
-	definition := def.NewDefinition()
+	module := def.NewModule()
 
 	for _, source := range sources {
-		err = p.processSource(definition, source)
+		err = p.processSource(module, source)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	return definition, nil
+	err = p.computeModuleData(module)
+	if err != nil {
+		return nil, err
+	}
+
+	return module, nil
 }
 
-func (p *Processor) processSource(definition *def.Definition, sourceOrigin *def.SourceOrigin) error {
+func (p *Processor) processSource(module *def.Module, sourceOrigin *def.SourceOrigin) error {
 
-	source, err := p.sourceOriginToSource(sourceOrigin)
+	source, err := p.sourceOriginToSource(module, sourceOrigin)
 	if err != nil {
 		return err
 	}
 
-	err = p.addSourceToDefinition(definition, source)
+	err = p.addSourceToModule(module, source)
 	if err != nil {
 		return err
 	}
@@ -44,9 +50,10 @@ func (p *Processor) processSource(definition *def.Definition, sourceOrigin *def.
 	return nil
 }
 
-func (p *Processor) sourceOriginToSource(sourceOrigin *def.SourceOrigin) (*def.Source, error) {
+func (p *Processor) sourceOriginToSource(module *def.Module, sourceOrigin *def.SourceOrigin) (*def.Source, error) {
 
-	source := def.NewSource(sourceOrigin.Path)
+	source := def.NewSource(module, sourceOrigin.SourceName, sourceOrigin.SourcePath)
+	source.Name = sourceOrigin.Name
 	source.Version = sourceOrigin.Version
 	source.Includes = sourceOrigin.Includes
 
@@ -83,8 +90,34 @@ func (p *Processor) sourceOriginToSource(sourceOrigin *def.SourceOrigin) (*def.S
 				methodDef.Type = typeAnnotation
 			}
 
-			if methodDef.Type != "POST" && len(methodDef.Inputs) > 0 {
-				return nil, fmt.Errorf("method %s.%s has inputs but type is not POST", serviceDef.Name, methodDef.Name)
+			if methodDef.Type != "POST" && methodDef.Type != "PUT" && len(methodDef.Inputs) > 0 {
+				return nil, fmt.Errorf(
+					"method %s.%s has inputs but type is not POST or PUT",
+					serviceDef.Name,
+					methodDef.Name,
+				)
+			}
+
+			var methodHasStructInput bool
+			var methodHasBytesInput bool
+			for _, inputDef := range methodDef.Inputs {
+
+				if inputDef.IsStruct {
+					methodHasStructInput = true
+
+				} else if inputDef.Type == "bytes" {
+					methodHasBytesInput = true
+
+				}
+
+			}
+
+			if methodHasStructInput && methodHasBytesInput {
+				methodDef.ContentType = "multipart/form-data"
+			} else if methodHasStructInput {
+				methodDef.ContentType = "application/json"
+			} else if methodHasBytesInput {
+				methodDef.ContentType = "application/octet-stream"
 			}
 
 		}
@@ -108,31 +141,42 @@ func (p *Processor) getAnnotationValue(annotations []*def.Annotation, name strin
 	return ""
 }
 
-func (p *Processor) addSourceToDefinition(definition *def.Definition, source *def.Source) error {
+func (p *Processor) addSourceToModule(module *def.Module, source *def.Source) error {
 
-	if definition.MainSource == nil {
-		definition.MainSource = source
+	if module.MainSource == nil {
+		module.MainSource = source
 	}
 
-	definition.Sources[source.Name] = source
+	module.Sources[source.SourceName] = source
+	source.Module = module
+
+	// -- Name
+
+	if module.MainSource != source && source.Name != "" {
+		return fmt.Errorf("name can be defined only in main source file")
+	} else if module.MainSource == source && source.Name == "" {
+		return fmt.Errorf("name is not specified in main source file")
+	}
+
+	module.Name = source.Name
 
 	// -- Version
 
-	if definition.MainSource != source && source.Version != "" {
+	if module.MainSource != source && source.Version != "" {
 		return fmt.Errorf("version can be defined only in main source file")
-	} else if definition.MainSource == source && source.Version == "" {
+	} else if module.MainSource == source && source.Version == "" {
 		return fmt.Errorf("version is not specified in main source file")
 	}
 
-	definition.Version = source.Version
+	module.Version = source.Version
 
 	// -- Options
 
-	if definition.MainSource != source && len(source.Options) > 0 {
+	if module.MainSource != source && len(source.Options) > 0 {
 		return fmt.Errorf("options can be defined only in main source file")
 	}
 
-	definition.Options = source.Options
+	module.Options = source.Options
 
 	// -- Structs
 
@@ -141,8 +185,8 @@ func (p *Processor) addSourceToDefinition(definition *def.Definition, source *de
 		var structDef0 *def.Struct
 		var ok bool
 
-		if structDef0, ok = definition.Structs[structDef.Name]; !ok {
-			definition.Structs[structDef.Name] = structDef
+		if structDef0, ok = module.Structs[structDef.Name]; !ok {
+			module.Structs[structDef.Name] = structDef
 			continue
 		}
 
@@ -150,8 +194,8 @@ func (p *Processor) addSourceToDefinition(definition *def.Definition, source *de
 			return fmt.Errorf(
 				"struct %s from %s is already defined in %s",
 				structDef.Name,
-				structDef.Source.Name,
-				structDef0.Source.Name,
+				structDef.Source.SourceName,
+				structDef0.Source.SourceName,
 			)
 		}
 
@@ -164,8 +208,8 @@ func (p *Processor) addSourceToDefinition(definition *def.Definition, source *de
 		var serviceDef0 *def.Service
 		var ok bool
 
-		if serviceDef0, ok = definition.Services[serviceDef.Name]; !ok {
-			definition.Services[serviceDef.Name] = serviceDef
+		if serviceDef0, ok = module.Services[serviceDef.Name]; !ok {
+			module.Services[serviceDef.Name] = serviceDef
 			continue
 		}
 
@@ -173,8 +217,8 @@ func (p *Processor) addSourceToDefinition(definition *def.Definition, source *de
 			return fmt.Errorf(
 				"service %s from %s is already defined in %s",
 				serviceDef.Name,
-				serviceDef.Source.Name,
-				serviceDef0.Source.Name,
+				serviceDef.Source.SourceName,
+				serviceDef0.Source.SourceName,
 			)
 		}
 
@@ -187,8 +231,8 @@ func (p *Processor) addSourceToDefinition(definition *def.Definition, source *de
 		var errorDef0 *def.Error
 		var ok bool
 
-		if errorDef0, ok = definition.Errors[errorDef.Name]; !ok {
-			definition.Errors[errorDef.Name] = errorDef
+		if errorDef0, ok = module.Errors[errorDef.Name]; !ok {
+			module.Errors[errorDef.Name] = errorDef
 			continue
 		}
 
@@ -196,8 +240,8 @@ func (p *Processor) addSourceToDefinition(definition *def.Definition, source *de
 			return fmt.Errorf(
 				"error %s from %s is already defined in %s",
 				errorDef.Name,
-				errorDef.Source.Name,
-				errorDef0.Source.Name,
+				errorDef.Source.SourceName,
+				errorDef0.Source.SourceName,
 			)
 		}
 
@@ -206,22 +250,22 @@ func (p *Processor) addSourceToDefinition(definition *def.Definition, source *de
 	// -- Includes
 
 	for _, include := range source.Includes {
-		if !slices.Contains(definition.Includes, include) {
-			definition.Includes = append(definition.Includes, include)
+		if !slices.Contains(module.Includes, include) {
+			module.Includes = append(module.Includes, include)
 		}
 	}
 
 	return nil
 }
 
-func (p *Processor) checkDataTypes(definition *def.Definition) error {
+func (p *Processor) checkDataTypes(module *def.Module) error {
 
-	var structNames = make([]string, 0, len(definition.Structs))
-	for _, structDef := range definition.Structs {
+	var structNames = make([]string, 0, len(module.Structs))
+	for _, structDef := range module.Structs {
 		structNames = append(structNames, structDef.Name)
 	}
 
-	for _, structDef := range definition.Structs {
+	for _, structDef := range module.Structs {
 		for _, fieldDef := range structDef.Fields {
 			err := p.checkDataType(fieldDef.Type, structNames)
 			if err != nil {
@@ -230,7 +274,7 @@ func (p *Processor) checkDataTypes(definition *def.Definition) error {
 		}
 	}
 
-	for _, serviceDef := range definition.Services {
+	for _, serviceDef := range module.Services {
 		for _, methodDef := range serviceDef.Methods {
 			for _, inputDef := range methodDef.Inputs {
 				err := p.checkDataType(inputDef.Type, structNames)
@@ -294,14 +338,14 @@ func (p *Processor) _checkDataType(dataType string, structNames []string) error 
 	return nil
 }
 
-func (p *Processor) computeDefintionData(definition *def.Definition) error {
+func (p *Processor) computeModuleData(module *def.Module) error {
 
-	structNames := make([]string, 0, len(definition.Structs))
-	for _, structDef := range definition.Structs {
+	structNames := make([]string, 0, len(module.Structs))
+	for _, structDef := range module.Structs {
 		structNames = append(structNames, structDef.Name)
 	}
 
-	for _, serviceDef := range definition.Services {
+	for _, serviceDef := range module.Services {
 		for _, methodDef := range serviceDef.Methods {
 			for _, inputDef := range methodDef.Inputs {
 				if slices.Contains(structNames, inputDef.Type) {
@@ -316,7 +360,7 @@ func (p *Processor) computeDefintionData(definition *def.Definition) error {
 		}
 	}
 
-	for _, structDef := range definition.Structs {
+	for _, structDef := range module.Structs {
 		for _, fieldDef := range structDef.Fields {
 			if slices.Contains(structNames, fieldDef.Type) {
 				fieldDef.IsStruct = true

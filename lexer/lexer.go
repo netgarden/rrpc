@@ -1,7 +1,6 @@
 package lexer
 
 import (
-	"bufio"
 	"fmt"
 	"io"
 	"unicode"
@@ -31,14 +30,12 @@ func newItem(pos Position, token Token, lit string) *Item {
 }
 
 type Lexer struct {
-	pos    Position
-	reader *bufio.Reader
+	reader *RunesReader
 }
 
 func New(reader io.Reader) *Lexer {
 	return &Lexer{
-		pos:    Position{Line: 1, Column: 0},
-		reader: bufio.NewReader(reader),
+		reader: NewRunesReader(reader),
 	}
 }
 
@@ -49,10 +46,10 @@ func (l *Lexer) Scan() *Item {
 	// keep looping until we return a token
 	for {
 
-		r, _, err := l.reader.ReadRune()
+		r, pos, err := l.reader.Read()
 		if err != nil {
 			if err == io.EOF {
-				return newItem(l.pos, EOF, "")
+				return newItem(pos, EOF, "")
 			}
 
 			// at this point there isn't much we can do, and the compiler
@@ -60,45 +57,33 @@ func (l *Lexer) Scan() *Item {
 			panic(err)
 		}
 
-		// update the Column to the position of the newly read in rune
-		l.pos.Column++
-
-		if r == '\n' {
-			l.resetPosition()
-			continue
-
-		} else if unicode.IsSpace(r) {
+		if unicode.IsSpace(r) {
 			l.backup()
-			pos, lit := l.readWhiteSpace()
-			if lit == ":newline:" {
-				return newItem(pos, NEWLINE, lit)
-			} else {
-				return newItem(pos, WHITESPACE, lit)
-			}
+			return l.readWhiteSpace()
 		} else if r == '"' {
-			startPos := l.pos
+			startPos := pos
 			l.backup()
 			lit := l.readString()
 			return newItem(startPos, STRING, lit)
 		} else if r == '@' {
-			startPos := l.pos
+			startPos := pos
 			lit := l.readAnnotationName()
 			return newItem(startPos, ANNOTATION, lit)
 		} else if r == '(' {
-			return newItem(l.pos, BO, string(r))
+			return newItem(pos, BO, string(r))
 		} else if r == ')' {
-			return newItem(l.pos, BC, string(r))
+			return newItem(pos, BC, string(r))
 		} else if r == '{' {
-			return newItem(l.pos, BCO, string(r))
+			return newItem(pos, BCO, string(r))
 		} else if r == '}' {
-			return newItem(l.pos, BCC, string(r))
+			return newItem(pos, BCC, string(r))
 		} else if r == ',' {
-			return newItem(l.pos, COMMA, string(r))
+			return newItem(pos, COMMA, string(r))
 		} else if r == '=' {
-			return newItem(l.pos, EQ, string(r))
+			return newItem(pos, EQ, string(r))
 		} else {
 			// backup and let readIdent rescan the beginning of the ident
-			startPos := l.pos
+			startPos := pos
 			l.backup()
 			lit := l.readIdent()
 
@@ -111,6 +96,8 @@ func (l *Lexer) Scan() *Item {
 				return newItem(startPos, SERVICE, lit)
 			case "struct":
 				return newItem(startPos, STRUCT, lit)
+			case "name":
+				return newItem(startPos, NAME, lit)
 			case "version":
 				return newItem(startPos, VERSION, lit)
 			}
@@ -121,54 +108,49 @@ func (l *Lexer) Scan() *Item {
 
 }
 
-func (l *Lexer) resetPosition() {
-	l.pos.Line++
-	l.pos.Column = 0
-}
-
 func (l *Lexer) backup() {
 
-	if err := l.reader.UnreadRune(); err != nil {
+	if err := l.reader.Backup(); err != nil {
 		panic(err)
 	}
 
-	l.pos.Column--
 }
 
-func (l *Lexer) readWhiteSpace() (Position, string) {
+func (l *Lexer) readWhiteSpace() *Item {
 
-	var lit string
-	startPos := l.pos
+	var startPos *Position
+
+	var token Token = -1
+	var lit string = ""
 
 	for {
 
-		r, _, err := l.reader.ReadRune()
+		r, pos, err := l.reader.Read()
+		if startPos == nil {
+			startPos = &pos
+		}
 		if err != nil {
 			if err == io.EOF {
-				// at the end of the int
-				return startPos, lit
+				break
 			}
 		}
-
-		currentPos := l.pos
-
-		l.pos.Column++
 
 		if unicode.IsSpace(r) {
-			if r == '\n' && lit != ":newline:" {
-				startPos = currentPos
-				lit = ":newline:"
-			} else if lit == "" {
-				lit = ":whitespace:"
+			if r == '\n' && token != NEWLINE {
+				token = NEWLINE
+			} else if token == -1 {
+				token = WHITESPACE
 			}
 		} else {
-			// scanned something not in the integer
 			l.backup()
-			return startPos, lit
+			break
 		}
+
+		lit += string(r)
 
 	}
 
+	return newItem(*startPos, token, lit)
 }
 
 // readAnnotationName scans the input until the end of an annotation identifier and then returns the
@@ -176,7 +158,8 @@ func (l *Lexer) readWhiteSpace() (Position, string) {
 func (l *Lexer) readAnnotationName() string {
 	var lit string
 	for {
-		r, _, err := l.reader.ReadRune()
+
+		r, _, err := l.reader.Read()
 		if err != nil {
 			if err == io.EOF {
 				// at the end of the identifier
@@ -184,7 +167,6 @@ func (l *Lexer) readAnnotationName() string {
 			}
 		}
 
-		l.pos.Column++
 		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' {
 			lit = lit + string(r)
 		} else {
@@ -200,7 +182,7 @@ func (l *Lexer) readAnnotationName() string {
 func (l *Lexer) readInt() string {
 	var lit string
 	for {
-		r, _, err := l.reader.ReadRune()
+		r, _, err := l.reader.Read()
 		if err != nil {
 			if err == io.EOF {
 				// at the end of the int
@@ -208,7 +190,6 @@ func (l *Lexer) readInt() string {
 			}
 		}
 
-		l.pos.Column++
 		if unicode.IsDigit(r) {
 			lit = lit + string(r)
 		} else {
@@ -224,7 +205,7 @@ func (l *Lexer) readInt() string {
 func (l *Lexer) readIdent() string {
 	var lit string
 	for {
-		r, _, err := l.reader.ReadRune()
+		r, _, err := l.reader.Read()
 		if err != nil {
 			if err == io.EOF {
 				// at the end of the identifier
@@ -232,7 +213,6 @@ func (l *Lexer) readIdent() string {
 			}
 		}
 
-		l.pos.Column++
 		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' || r == '[' || r == ']' {
 			lit = lit + string(r)
 		} else {
@@ -258,12 +238,10 @@ func (l *Lexer) readString() string {
 		}
 
 		var err error
-		r, _, err = l.reader.ReadRune()
+		r, _, err = l.reader.Read()
 		if err != nil {
 			panic(err)
 		}
-
-		l.pos.Column++
 
 		if r0 == 0 && r == '"' {
 			continue
@@ -276,29 +254,4 @@ func (l *Lexer) readString() string {
 		lit = lit + string(r)
 	}
 
-}
-
-func (l *Lexer) read() (rune, int, error) {
-
-	r, n, err := l.reader.ReadRune()
-	if err == nil && r == '\n' {
-		l.resetPosition()
-	}
-
-	return r, n, err
-}
-
-func (l *Lexer) unread() error {
-
-	err := l.reader.UnreadRune()
-	if err != nil {
-		return err
-	}
-
-	r, _, err := l.reader.ReadRune()
-	if err == nil && r == '\n' {
-
-	}
-
-	return nil
 }
