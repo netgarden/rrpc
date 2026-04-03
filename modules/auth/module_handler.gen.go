@@ -1,0 +1,265 @@
+package auth
+
+import (
+    "bytes"
+    "context"
+    "encoding/json"
+    "errors"
+    "io"
+    "net/http"
+    "strconv"
+
+    "github.com/netgarden/rrpc"
+)
+
+func newAuthServiceHandler(service AuthService) *AuthServiceHandler {
+
+    serviceHandler := &AuthServiceHandler{}
+    serviceHandler.name = "Auth"
+    serviceHandler.path = rrpc.ParsePath("Auth")
+    serviceHandler.methods = []rrpc.MethodHolder{
+        {
+            Path:        rrpc.ParsePath("login"),
+            Type:        "POST",
+            ContentType: "",
+            HandlerFunc: serviceHandler.handleLogin,
+        },
+        {
+            Path:        rrpc.ParsePath("logout"),
+            Type:        "POST",
+            ContentType: "",
+            HandlerFunc: serviceHandler.handleLogout,
+        },
+    }
+    serviceHandler.service = service
+
+    return serviceHandler
+}
+
+type AuthServiceHandler struct {
+    name    string
+    path    *rrpc.Path
+    methods []rrpc.MethodHolder
+
+    service AuthService
+}
+
+func (h *AuthServiceHandler) Name() string {
+    return h.name
+}
+
+func (h *AuthServiceHandler) Path() *rrpc.Path {
+    return h.path
+}
+
+func (h *AuthServiceHandler) Methods() []rrpc.MethodHolder {
+    return h.methods
+}
+
+func (h *AuthServiceHandler) handleLogin(ctx *rrpc.Context) error {
+
+	reqBody, err := h.readBody(ctx.Request())
+	if err != nil {
+		return err
+	}
+
+	reqPayload := &LoginRequest{}
+	if err := json.Unmarshal(reqBody, reqPayload); err != nil {
+		return ErrRrpcBadRequest.WithCausef("failed to unmarshal request data: %w", err)
+	}
+
+	// Call service method implementation.
+    ret0, err1 := h.service.Login(ctx, reqPayload)
+    if err1 != nil {
+    	rpcErr, ok := err1.(RRPCError)
+    	if !ok {
+    		rpcErr = ErrRrpcEndpoint.WithCause(err1)
+    	}
+    	return rpcErr
+    }
+
+	// ctx.Response().WriteHeader(http.StatusOK)
+
+    
+    
+	respBody, err := json.Marshal(ret0)
+	if err != nil {
+		return ErrRrpcBadResponse.WithCausef("failed to marshal json response: %w", err)
+	}
+
+    ctx.Response().Header().Set("Content-Type", "application/json")
+    ctx.Response().Write(respBody)
+
+	
+
+	return nil
+}
+
+func (h *AuthServiceHandler) handleLogout(ctx *rrpc.Context) error {
+
+	// Call service method implementation.
+    err1 := h.service.Logout(ctx)
+    if err1 != nil {
+    	rpcErr, ok := err1.(RRPCError)
+    	if !ok {
+    		rpcErr = ErrRrpcEndpoint.WithCause(err1)
+    	}
+    	return rpcErr
+    }
+
+	// ctx.Response().WriteHeader(http.StatusOK)
+
+    
+
+	return nil
+}
+
+
+
+func (h *AuthServiceHandler) readBody(r *http.Request) ([]byte, error) {
+    defer r.Body.Close()
+
+    reqBody, err := io.ReadAll(r.Body)
+	if err != nil {
+	    return nil, ErrRrpcBadRequest.WithCausef("failed to read request data: %w", err)
+	}
+
+    return reqBody, nil
+}
+
+func newAuthServiceClientHandler(client *Client) *AuthServiceClientHandler {
+    return &AuthServiceClientHandler{
+        client: client,
+        name: "Auth",
+        path: "Auth",
+    }
+}
+
+type AuthServiceClientHandler struct {
+    name string
+    path string
+    client *Client
+}
+
+func (h *AuthServiceClientHandler) Login(ctx context.Context, data *LoginRequest) (*LoginResponse, error) {
+
+    methodType := "POST"
+    methodPath := "login"
+    methodContentType := ""
+    url := h.client.url + "/" + h.path + "/" + methodPath
+
+    r, err := h.doHttpRequest(ctx, methodType, url, methodContentType,data)
+    if err != nil {
+        return nil, err
+    }
+
+    out := &LoginResponse{}
+
+    defer r.Close()
+
+    respBody, err := h.readAll(r)
+    if err != nil {
+        return nil, err
+    }
+
+    err = json.Unmarshal(respBody, out)
+    if err != nil {
+        return nil, ErrRrpcBadResponse.WithCausef("failed to read unmarshal body: %w", err)
+    }
+
+    return out, nil
+}
+
+func (h *AuthServiceClientHandler) Logout(ctx context.Context)error {
+
+    methodType := "POST"
+    methodPath := "logout"
+    methodContentType := ""
+    url := h.client.url + "/" + h.path + "/" + methodPath
+
+    _, err := h.doHttpRequest(ctx, methodType, url, methodContentType,nil)
+    if err != nil {
+        return err
+    }
+
+    return nil
+}
+
+
+
+func (h *AuthServiceClientHandler) doHttpRequest(ctx context.Context, method string, url string, contentType string, in interface{}) (*SizedReadCloser, error) {
+
+    var reqBodyBuffer io.Reader = nil
+
+    if in != nil {
+
+        reqBody, err := json.Marshal(in)
+        if err != nil {
+            return nil, ErrRrpcBadRequest.WithCausef("failed to marshal json request: %w", err)
+        }
+
+        reqBodyBuffer = bytes.NewBuffer(reqBody)
+    }
+
+    req, err := http.NewRequest(method, url, reqBodyBuffer)
+    if err != nil {
+       	return nil, ErrRrpcBadRequest.WithCausef("failed to create http request: %w", err)
+    }
+
+    if ctx != nil {
+        req = req.WithContext(ctx)
+    }
+
+    if in != nil {
+        req.Header.Set("Content-Type", contentType)
+    }
+
+    req.Header.Set("Accept", "application/json")
+
+    resp, err := h.client.Do(req)
+    if err != nil {
+        return nil, ErrRrpcRequestFailed.WithCause(err)
+    }
+
+    if resp.StatusCode != 200 {
+        defer resp.Body.Close()
+
+        respBody, err := h.readAll(resp.Body)
+        if err != nil {
+            return nil, err
+        }
+
+        var rpcErr RRPCError
+		if err := json.Unmarshal(respBody, &rpcErr); err != nil {
+			return nil, ErrRrpcBadResponse.WithCausef("failed to unmarshal server error: %w", err)
+		}
+		if rpcErr.Cause != "" {
+			rpcErr.cause = errors.New(rpcErr.Cause)
+		}
+
+		return nil, rpcErr
+    }
+
+    var ret *SizedReadCloser
+
+    contentLengthStr := resp.Header.Get("Content-Length")
+    if contentLengthStr != "" {
+
+        contentLength, err := strconv.ParseInt(contentLengthStr, 10, 64)
+        if err != nil {
+            return nil, ErrRrpcBadResponse.WithCausef("failed to parse Content-Length header: %w", err)
+        }
+
+        ret = NewSizedReadCloser(resp.Body, contentLength)
+    }
+
+    return ret, nil
+}
+
+func (h *AuthServiceClientHandler) readAll(r io.Reader) ([]byte, error) {
+    b, err := io.ReadAll(r)
+    if err != nil {
+        return nil, ErrRrpcBadResponse.WithCausef("failed to read server response body: %w", err)
+    }
+    return b, nil
+}
