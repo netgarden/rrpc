@@ -1,0 +1,22 @@
+version "0.0.1"
+
+option go_package = "rpc"
+
+struct Request {
+    data string
+}
+
+struct Response {
+    ok bool
+}
+
+@path("test")
+service Test {
+
+    @method("GET")
+    ping()
+
+    @method("POST") @path("do-work")
+    doWork(request Request) (response Response)
+
+}
