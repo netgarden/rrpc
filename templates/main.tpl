@@ -1,3 +1,5 @@
+import { RRPCClient, RRPCResponse } from "$lib/rrpc";
+
 {{ template "client" . }}
 
 {{ range $_, $service := .Services }}
@@ -8,4 +10,4 @@
 {{ template "struct" $struct }}
 {{ end }}
 
-{{ template "rrpcClient" . }}
+{{ template "errors" . }}

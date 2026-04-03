@@ -11,19 +11,20 @@ class {{ firstLetterToUpper .Name }}ServiceHandler {
         this._client = client;
     }
 
-    {{ range $_, $method := .Methods -}}
+    {{- range $_, $method := .Methods }}
 
-    {{ firstLetterToLower $method.Name }}(
+    async {{ firstLetterToLower $method.Name }}(
     {{- range $i, $input := $method.Inputs -}}
     {{ firstLetterToLower $input.Name }}: {{ if $input.IsStruct }}{{ firstLetterToUpper $input.Type }}{{ else }}any{{ end }}
     {{- if not (isLast $i $method.Inputs ) }}, {{ end }}
     {{- end -}}
-    )
-    {{- if gt (len $method.Outputs) 0 -}}
-    : {{ range $i, $output := $method.Outputs -}}
-    {{- if $output.IsStruct }}{{ firstLetterToUpper $output.Type }}{{ else }}any{{ end }}
-    {{- if not (isLast $i $method.Outputs ) }},{{ end }}
+    ) : {{ if gt (len $method.Outputs) 0 -}}
+    {{ range $i, $output := $method.Outputs -}}
+    {{- if $output.IsStruct }}Promise<{{ firstLetterToUpper $output.Type }}{{ else }}any{{ end }}>
+    {{- if not (isLast $i $method.Outputs ) }}, {{ end }}
     {{- end -}}
+    {{ else -}}
+    Promise<void>
     {{- end }} {
 
         let method = "{{ $method.Type }}";
@@ -37,18 +38,30 @@ class {{ firstLetterToUpper .Name }}ServiceHandler {
             {{- end }}
         };
 
-        let reqDataStr = JSON.stringify(reqData);
-        {{ end }}
+        let reqDataStr : string = JSON.stringify(reqData);
 
-        // TODO: serialization, deserialization, ...
-        let resp = this._client.sendRequest(method, uri, {{ if gt (len $method.Inputs) 0 }}reqDataStr{{ else }}null{{ end }});
+        {{ end -}}
+        let res : RRPCResponse = await this._client.sendRequest(method, uri, {{ if gt (len $method.Inputs) 0 }}reqDataStr{{ else }}null{{ end }});
 
-        {{ if gt (len $method.Outputs) 0 }}
-        {{ end }}
+        {{- range $i, $output := $method.Outputs }}
+        {{- if $output.IsStruct }}
+        let obj : {{ firstLetterToUpper $output.Type }} = await res.response.json();
+        {{- else if eq $output.Type "bytes" }}
+        let bytes : any = await res.response.text();
+        {{- end }}
+        {{- end }}
 
+        return
+        {{- range $i, $output := $method.Outputs }}
+        {{- if $output.IsStruct }} obj
+        {{- else if eq $output.Type "bytes" }} bytes
+        {{- end -}}
+        {{- if not (isLast $i $method.Outputs ) }}, {{ end }}
+        {{- end -}}
+        ;
     }
 
-    {{ end }}
+    {{- end }}
 
 }
 

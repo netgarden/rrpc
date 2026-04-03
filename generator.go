@@ -1,11 +1,12 @@
 package rrpc_gen_ts
 
 import (
-	def "github.com/netgarden/rrpc-def"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"text/template"
+
+	def "github.com/netgarden/rrpc-def"
 )
 
 func NewGenerator() def.Generator {
@@ -18,7 +19,7 @@ type Generator struct {
 	fs fs.FS
 }
 
-func (g *Generator) Generate(definition *def.Module, targetDir string) error {
+func (g *Generator) Generate(module *def.Module, targetDir string) error {
 
 	baseTpl, err := template.New("").Funcs(getTemplatesFuncs()).ParseFS(g.fs, "*.tpl")
 	if err != nil {
@@ -27,11 +28,11 @@ func (g *Generator) Generate(definition *def.Module, targetDir string) error {
 
 	mainTpl := baseTpl.Lookup("main.tpl")
 
-	f, err := os.Create(filepath.Join(targetDir, "rrpc.ts"))
+	f, err := os.Create(filepath.Join(targetDir, module.Name+".ts"))
 	if err != nil {
 		return err
 	}
 	defer f.Close()
 
-	return mainTpl.Execute(f, definition)
+	return mainTpl.Execute(f, module)
 }

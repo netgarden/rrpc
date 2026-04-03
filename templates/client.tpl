@@ -1,6 +1,6 @@
 {{ define "client" -}}
 
-class Client {
+export class {{ firstLetterToUpper .Name }}Client {
 
     _client: RRPCClient;
 
