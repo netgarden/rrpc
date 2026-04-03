@@ -4,11 +4,11 @@ func new{{ firstLetterToUpper .Name }}ServiceHandler(service {{ firstLetterToUpp
 
     serviceHandler := &{{ firstLetterToUpper .Name }}ServiceHandler{}
     serviceHandler.name = "{{ .Name }}"
-    serviceHandler.path = "{{ .Path }}"
-    serviceHandler.methods = []MethodHolder{
+    serviceHandler.path = rrpc.ParsePath("{{ .Path }}")
+    serviceHandler.methods = []rrpc.MethodHolder{
         {{- range $_, $method := .Methods}}
         {
-            Path:        "{{ $method.Path }}",
+            Path:        rrpc.ParsePath("{{ $method.Path }}"),
             Type:        "{{ $method.Type }}",
             ContentType: "{{ $method.ContentType }}",
             HandlerFunc: serviceHandler.handle{{ firstLetterToUpper $method.Name }},
@@ -22,8 +22,8 @@ func new{{ firstLetterToUpper .Name }}ServiceHandler(service {{ firstLetterToUpp
 
 type {{ firstLetterToUpper .Name }}ServiceHandler struct {
     name    string
-    path    string
-    methods []MethodHolder
+    path    *rrpc.Path
+    methods []rrpc.MethodHolder
 
     service {{ firstLetterToUpper .Name }}Service
 }
@@ -32,20 +32,19 @@ func (h *{{ firstLetterToUpper $service.Name }}ServiceHandler) Name() string {
     return h.name
 }
 
-func (h *{{ firstLetterToUpper $service.Name }}ServiceHandler) Path() string {
+func (h *{{ firstLetterToUpper $service.Name }}ServiceHandler) Path() *rrpc.Path {
     return h.path
 }
 
-func (h *{{ firstLetterToUpper $service.Name }}ServiceHandler) Methods() []MethodHolder {
+func (h *{{ firstLetterToUpper $service.Name }}ServiceHandler) Methods() []rrpc.MethodHolder {
     return h.methods
 }
 
 {{ range $_, $method := .Methods -}}
-func (h *{{ firstLetterToUpper $service.Name }}ServiceHandler) handle{{ firstLetterToUpper $method.Name }}(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
-    ctx = context.WithValue(ctx, MethodNameCtxKey, "{{ $method.Name }}")
+func (h *{{ firstLetterToUpper $service.Name }}ServiceHandler) handle{{ firstLetterToUpper $method.Name }}(ctx *rrpc.Context) error {
 
 	{{ if and (eq (len $method.Inputs) 1) ((index $method.Inputs 0).IsStruct) -}}
-	reqBody, err := h.readBody(r)
+	reqBody, err := h.readBody(ctx.Request())
 	if err != nil {
 		return err
 	}
@@ -58,7 +57,7 @@ func (h *{{ firstLetterToUpper $service.Name }}ServiceHandler) handle{{ firstLet
 	{{ end -}}
 
     {{ if and (eq (len $method.Outputs) 1) (eq (index $method.Outputs 0).Type "bytes") -}}
-    w1 := NewResponseWriter(w, "application/octet-stream")
+    w1 := NewResponseWriter(ctx.Response(), "application/octet-stream")
 
     {{ end -}}
 
@@ -72,7 +71,7 @@ func (h *{{ firstLetterToUpper $service.Name }}ServiceHandler) handle{{ firstLet
     	return rpcErr
     }
 
-	// w.WriteHeader(http.StatusOK)
+	// ctx.Response().WriteHeader(http.StatusOK)
 
     {{ if eq (len $method.Outputs) 1 }}
     {{ if (index $method.Outputs 0).IsStruct }}
@@ -81,11 +80,11 @@ func (h *{{ firstLetterToUpper $service.Name }}ServiceHandler) handle{{ firstLet
 		return ErrRrpcBadResponse.WithCausef("failed to marshal json response: %w", err)
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.Write(respBody)
+    ctx.Response().Header().Set("Content-Type", "application/json")
+    ctx.Response().Write(respBody)
 
 	{{ else if eq (index $method.Outputs 0).Type "bytes" }}
-	w.Header().Set("Content-Type", "application/octet-stream")
+        ctx.Response().Header().Set("Content-Type", "application/octet-stream")
 
 	{{- end}}
 	{{- end}}

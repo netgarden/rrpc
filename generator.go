@@ -19,7 +19,7 @@ type Generator struct {
 	fs fs.FS
 }
 
-func (g *Generator) Generate(definition *def.Definition, targetDir string) error {
+func (g *Generator) Generate(definition *def.Module, targetDir string) error {
 
 	tplFuncs := def.GetTemplateFuncMap()
 	tplFuncs["createFieldDefaultValue"] = createFieldDefaultValue
@@ -47,7 +47,7 @@ func (g *Generator) Generate(definition *def.Definition, targetDir string) error
 			continue
 		}
 
-		name := source.Name[:len(source.Name)-len(filepath.Ext(source.Name))]
+		name := source.SourceName[:len(source.SourceName)-len(filepath.Ext(source.SourceName))]
 		target := filepath.Join(targetDir, name+".gen.go")
 
 		err = g.executeSourceTemplate(sourceTpl, target, source)
@@ -70,8 +70,8 @@ func (g *Generator) Generate(definition *def.Definition, targetDir string) error
 		return err
 	}
 
-	serverTpl := baseTpl.Lookup("rrpcServer.tpl")
-	err = g.executeDefinitionTemplate(serverTpl, filepath.Join(targetDir, "rrpc.server.gen.go"), definition)
+	serverTpl := baseTpl.Lookup("rrpcModule.tpl")
+	err = g.executeDefinitionTemplate(serverTpl, filepath.Join(targetDir, "rrpc.module.gen.go"), definition)
 	if err != nil {
 		return err
 	}
@@ -96,7 +96,7 @@ func (g *Generator) executeSourceTemplate(tpl *template.Template, target string,
 	return tpl.Execute(f, source)
 }
 
-func (g *Generator) executeDefinitionTemplate(tpl *template.Template, target string, definition *def.Definition) error {
+func (g *Generator) executeDefinitionTemplate(tpl *template.Template, target string, definition *def.Module) error {
 
 	f, err := os.Create(target)
 	if err != nil {

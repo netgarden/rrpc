@@ -2,7 +2,7 @@
 type {{ firstLetterToUpper .Name }}Service interface {
     {{- range $methodKey, $method := .Methods }}
     {{ firstLetterToUpper $method.Name -}}
-        (ctx context.Context
+        (ctx *rrpc.Context
         {{- range $paramKey, $param := $method.Inputs -}}
         , {{ if $param.IsStruct }}{{ $param.Name }} *{{ $param.Type }}{{ else if eq $param.Type "bytes"}}r io.Reader{{ end }}
         {{- end }}

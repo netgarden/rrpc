@@ -59,7 +59,10 @@ func (r *SizedReader) Read(p []byte) (n int, err error) {
 
 func NewSizedReadCloser(r io.ReadCloser, size int64) *SizedReadCloser {
     return &SizedReadCloser{
-        size: size,
+        SizedReader: SizedReader{
+            size: size,
+            r: r,
+        },
         r: r,
     }
 }

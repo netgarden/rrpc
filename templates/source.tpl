@@ -1,6 +1,16 @@
 {{ $goImports := mklist }}
 {{- if gt (len .Services) 0 -}}
-{{- $goImports = append $goImports "context" -}}
+    {{- range $serviceKey, $service := .Services -}}
+        {{- range $methodKey, $method := $service.Methods -}}
+            {{- range $fieldKey, $field := $method.Inputs -}}
+                
+            {{- end -}}
+            {{- range $fieldKey, $field := $method.Outputs -}}
+
+            {{- end -}}
+        {{- end -}}
+    {{- end -}}
+    {{- $goImports = append $goImports "github.com/netgarden/rrpc" -}}
 {{- end -}}
 package {{ if index .Options "go_package" }}{{ .Options.go_package }}{{ else }}rpc{{ end }}
 
@@ -8,7 +18,6 @@ package {{ if index .Options "go_package" }}{{ .Options.go_package }}{{ else }}r
 import (
 {{- range $_, $goImport := $goImports }}
     "{{ $goImport }}"
-    "io"
 {{ end -}}
 )
 {{- end }}
