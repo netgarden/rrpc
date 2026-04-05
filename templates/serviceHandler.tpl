@@ -57,12 +57,12 @@ func (h *{{ firstLetterToUpper $service.Name }}ServiceHandler) handle{{ firstLet
 	{{ end -}}
 
     {{ if and (eq (len $method.Outputs) 1) (eq (index $method.Outputs 0).Type "bytes") -}}
-    w1 := NewResponseWriter(ctx.Response(), "application/octet-stream")
+    w1 := rrpc.NewResponseWriter(ctx.Response(), "application/octet-stream")
 
     {{ end -}}
 
 	// Call service method implementation.
-    {{if and (eq (len $method.Outputs) 1) ((index $method.Outputs 0).IsStruct)}}ret0, {{end}}err1 := h.service.{{firstLetterToUpper $method.Name}}(ctx{{range $i, $input := $method.Inputs}}, {{if $input.IsStruct}}reqPayload{{else if eq $input.Type "bytes"}}r.Body{{end}}{{end}}{{if eq (len $method.Outputs) 1}}{{if eq (index $method.Outputs 0).Type "bytes"}}, w1{{end}}{{end}})
+    {{if and (eq (len $method.Outputs) 1) ((index $method.Outputs 0).IsStruct)}}ret0, {{end}}err1 := h.service.{{firstLetterToUpper $method.Name}}(ctx{{range $i, $input := $method.Inputs}}, {{if $input.IsStruct}}reqPayload{{else if eq $input.Type "bytes"}}ctx.Request().Body{{end}}{{end}}{{if eq (len $method.Outputs) 1}}{{if eq (index $method.Outputs 0).Type "bytes"}}, w1{{end}}{{end}})
     if err1 != nil {
     	rpcErr, ok := err1.(RRPCError)
     	if !ok {

@@ -22,8 +22,8 @@ func (s *Module) Services() map[string]rrpc.ServiceHandler {
     return s.services
 }
 
-{{ range $_, $service := .Services -}}
+{{ range $_, $service := .Services }}
 func (s *Module) Set{{ $service.Name }}Service({{ firstLetterToLower $service.Name }}Service {{ $service.Name }}Service) {
     s.services["{{ $service.Name }}"] = new{{ firstLetterToUpper $service.Name }}ServiceHandler({{ firstLetterToLower $service.Name }}Service)
 }
-{{- end }}
+{{ end }}
