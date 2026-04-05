@@ -22,6 +22,8 @@ func (s *Module) Services() map[string]rrpc.ServiceHandler {
     return s.services
 }
 
+
 func (s *Module) SetAuthService(authService AuthService) {
     s.services["Auth"] = newAuthServiceHandler(authService)
 }
+

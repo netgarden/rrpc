@@ -2,6 +2,8 @@ package test
 
 import (
     "github.com/netgarden/rrpc"
+
+    "io"
 )
 
 // -- Services --------------------------------------------

@@ -1,0 +1,15 @@
+name = "files"
+version = "0.0.1"
+
+option go_package = "files"
+
+@Path("/files")
+service Files {
+    @method("POST")
+    @Path("/upload/{filename:string}")
+    upload(data bytes)
+
+    @method("GET")
+    @Path("/download/{filename:string}")
+    download() bytes
+}

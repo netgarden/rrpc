@@ -11,6 +11,6 @@ service Pinger {
 @Path("/")
 service Static {
     @method("GET")
-    @Path("/{path:path}")
+    @Path("/{filepath:path}")
     ServeStatic() bytes
 }

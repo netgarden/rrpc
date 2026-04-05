@@ -12,6 +12,12 @@ struct LoginResponse {
     ok bool
 }
 
+error AuthenticationError {
+    code = 1
+    message = "authentication failed"
+    http_code = 401
+}
+
 service Auth {
     login(request LoginRequest) (LoginResponse)
     logout()

@@ -22,3 +22,11 @@ type AuthService interface {
     Logout(ctx *rrpc.Context) error
 }
 
+// -- Errors ----------------------------------------------
+
+
+var (
+    ErrAuthenticationError  = RRPCError{Code: 1, Name: "AuthenticationError", Message: "authentication failed", HTTPStatus: 401}
+)
+
+

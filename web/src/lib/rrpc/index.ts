@@ -1,2 +1,2 @@
-export { RRPCClient, RRPCResponse } from "./client.ts";
+export { RRPCClient, RRPCResponse, type RRPCError, UnexpectedReturnCodeError } from "./client.ts";
 

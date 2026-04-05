@@ -1,3 +1,11 @@
+export interface RRPCError {
+    error: string;
+    code: number;
+    msg: string;
+    cause?: string;
+    status: number;
+}
+
 export class RRPCClient {
     _url: string;
 
@@ -15,8 +23,10 @@ export class RRPCClient {
             headers['Content-Type'] = 'application/json';
         }
 
+        const base : string = this._url.endsWith('/') ? this._url.slice(0, -1) : this._url;
+        const path : string = uri.startsWith('/') ? uri : '/' + uri;
         const resp : Response = await fetch(
-            this._url + "/" + uri,
+            base + path,
             {
                 headers: headers,
                 method: method,
@@ -24,8 +34,13 @@ export class RRPCClient {
             }
         );
 
-        if (resp.status !== 200) {
-
+        if (resp.status >= 400) {
+            const contentType : string = resp.headers.get('Content-Type') ?? '';
+            if (contentType.includes('application/problem+json')) {
+                const errBody = await resp.json();
+                throw errBody;
+            }
+            throw new UnexpectedReturnCodeError(resp.status, resp.statusText);
         }
 
         return new RRPCResponse(resp);
@@ -39,6 +54,19 @@ export class RRPCResponse {
 
     constructor(response: Response) {
         this.response = response;
+    }
+
+}
+
+export class UnexpectedReturnCodeError extends Error {
+
+    code : number;
+    reason : string;
+
+    constructor(code : number, reason : string) {
+        super("Received unexpected return code: '" + code + "' with reason '" + reason + "'")
+        this.code = code;
+        this.reason = reason;
     }
 
 }

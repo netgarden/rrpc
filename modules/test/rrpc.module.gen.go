@@ -22,8 +22,12 @@ func (s *Module) Services() map[string]rrpc.ServiceHandler {
     return s.services
 }
 
+
 func (s *Module) SetPingerService(pingerService PingerService) {
     s.services["Pinger"] = newPingerServiceHandler(pingerService)
-}func (s *Module) SetStaticService(staticService StaticService) {
+}
+
+func (s *Module) SetStaticService(staticService StaticService) {
     s.services["Static"] = newStaticServiceHandler(staticService)
 }
+

@@ -10,6 +10,8 @@ import (
 	"github.com/netgarden/rrpc"
 	"github.com/netgarden/rrpc-test/modules/auth"
 	authImpl "github.com/netgarden/rrpc-test/modules/auth/impl"
+	"github.com/netgarden/rrpc-test/modules/files"
+	filesImpl "github.com/netgarden/rrpc-test/modules/files/impl"
 	"github.com/netgarden/rrpc-test/modules/test"
 	testImpl "github.com/netgarden/rrpc-test/modules/test/impl"
 )
@@ -37,6 +39,13 @@ func (s *Server) Init() error {
 	pingerService := testImpl.NewPingerService()
 	testModule.SetPingerService(pingerService)
 
+	staticService := testImpl.NewStaticService("web/build")
+	testModule.SetStaticService(staticService)
+
+	filesModule := files.NewModule()
+	filesService := filesImpl.NewFilesService("uploads")
+	filesModule.SetFilesService(filesService)
+
 	rrpcServer := rrpc.NewServer()
 
 	err = rrpcServer.RegisterModule(authModule)
@@ -45,6 +54,11 @@ func (s *Server) Init() error {
 	}
 
 	err = rrpcServer.RegisterModule(testModule)
+	if err != nil {
+		return err
+	}
+
+	err = rrpcServer.RegisterModule(filesModule)
 	if err != nil {
 		return err
 	}

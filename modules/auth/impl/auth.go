@@ -11,7 +11,12 @@ func NewAuthService() auth.AuthService {
 
 type AuthService struct{}
 
-func (s *AuthService) Login(ctx *rrpc.Context, request *auth.LoginRequest) (*auth.LoginResponse, error) {
+func (s *AuthService) Login(ctx *rrpc.Context, data *auth.LoginRequest) (*auth.LoginResponse, error) {
+
+	if data.Username != data.Password {
+		return nil, auth.ErrAuthenticationError
+	}
+
 	return &auth.LoginResponse{
 		Ok: true,
 	}, nil

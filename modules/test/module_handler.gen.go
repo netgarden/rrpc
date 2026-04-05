@@ -193,10 +193,10 @@ func newStaticServiceHandler(service StaticService) *StaticServiceHandler {
 
     serviceHandler := &StaticServiceHandler{}
     serviceHandler.name = "Static"
-    serviceHandler.path = rrpc.ParsePath("Static")
+    serviceHandler.path = rrpc.ParsePath("/")
     serviceHandler.methods = []rrpc.MethodHolder{
         {
-            Path:        rrpc.ParsePath("ServeStatic"),
+            Path:        rrpc.ParsePath("/{filepath:path}"),
             Type:        "GET",
             ContentType: "",
             HandlerFunc: serviceHandler.handleServeStatic,
@@ -229,7 +229,7 @@ func (h *StaticServiceHandler) Methods() []rrpc.MethodHolder {
 
 func (h *StaticServiceHandler) handleServeStatic(ctx *rrpc.Context) error {
 
-	w1 := NewResponseWriter(ctx.Response(), "application/octet-stream")
+	w1 := rrpc.NewResponseWriter(ctx.Response(), "application/octet-stream")
 
     // Call service method implementation.
     err1 := h.service.ServeStatic(ctx, w1)
@@ -267,7 +267,7 @@ func newStaticServiceClientHandler(client *Client) *StaticServiceClientHandler {
     return &StaticServiceClientHandler{
         client: client,
         name: "Static",
-        path: "Static",
+        path: "/",
     }
 }
 
@@ -280,7 +280,7 @@ type StaticServiceClientHandler struct {
 func (h *StaticServiceClientHandler) ServeStatic(ctx context.Context) (*SizedReadCloser, error) {
 
     methodType := "GET"
-    methodPath := "ServeStatic"
+    methodPath := "/{filepath:path}"
     methodContentType := ""
     url := h.client.url + "/" + h.path + "/" + methodPath
 

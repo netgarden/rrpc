@@ -21,7 +21,7 @@ func newAuthServiceHandler(service AuthService) *AuthServiceHandler {
         {
             Path:        rrpc.ParsePath("login"),
             Type:        "POST",
-            ContentType: "",
+            ContentType: "application/json",
             HandlerFunc: serviceHandler.handleLogin,
         },
         {
@@ -145,7 +145,7 @@ func (h *AuthServiceClientHandler) Login(ctx context.Context, data *LoginRequest
 
     methodType := "POST"
     methodPath := "login"
-    methodContentType := ""
+    methodContentType := "application/json"
     url := h.client.url + "/" + h.path + "/" + methodPath
 
     r, err := h.doHttpRequest(ctx, methodType, url, methodContentType,data)
