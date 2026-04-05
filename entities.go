@@ -160,6 +160,10 @@ type Option struct {
 	Value string
 }
 
+func NewError(name string) *Error {
+	return &Error{Name: name}
+}
+
 type Error struct {
 	Name     string
 	Message  string

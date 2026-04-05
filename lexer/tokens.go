@@ -17,6 +17,7 @@ const (
 	STRUCT
 	SERVICE
 	INCLUDE
+	ERROR
 
 	ANNOTATION
 
@@ -46,6 +47,7 @@ var tokens = map[Token]string{
 	STRUCT:  "STRUCT",
 	SERVICE: "SERVICE",
 	INCLUDE: "INCLUDE",
+	ERROR:   "ERROR",
 
 	ANNOTATION: "ANNOTATION",
 

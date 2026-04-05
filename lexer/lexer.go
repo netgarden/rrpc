@@ -100,6 +100,8 @@ func (l *Lexer) Scan() *Item {
 				return newItem(startPos, NAME, lit)
 			case "version":
 				return newItem(startPos, VERSION, lit)
+			case "error":
+				return newItem(startPos, ERROR, lit)
 			}
 
 			return newItem(startPos, IDENT, lit)

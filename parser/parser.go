@@ -133,6 +133,9 @@ eof:
 		case lexer.SERVICE:
 			err = p.parseService(r, source, annotations)
 			break
+		case lexer.ERROR:
+			err = p.parseError(r, source)
+			break
 		case lexer.INCLUDE:
 			err = p.parseInclude(r, source)
 			break
@@ -486,6 +489,87 @@ func (p *Parser) parseServiceMethodParams(lex *lexer.Reader, input bool) ([]*def
 	}
 
 	return ret, nil
+}
+
+func (p *Parser) parseError(lex *lexer.Reader, source *def.SourceOrigin) error {
+
+	var item *lexer.Item
+	var err error
+
+	_, err = p.readLexItem(lex, lexer.WHITESPACE)
+	if err != nil {
+		return err
+	}
+
+	item, err = p.readLexItem(lex, lexer.IDENT)
+	if err != nil {
+		return err
+	}
+
+	errorName := item.Literal
+
+	p.skipLexItem(lex, lexer.WHITESPACE, lexer.NEWLINE)
+
+	_, err = p.readLexItem(lex, lexer.BCO)
+	if err != nil {
+		return err
+	}
+
+	errorDef := def.NewError(errorName)
+
+	for {
+
+		if p.readBCC(lex) {
+			break
+		}
+
+		p.skipLexItem(lex, lexer.WHITESPACE, lexer.NEWLINE)
+
+		item, err = p.readLexItem(lex, lexer.IDENT)
+		if err != nil {
+			return err
+		}
+
+		fieldName := item.Literal
+
+		p.skipLexItem(lex, lexer.WHITESPACE)
+
+		_, err = p.readLexItem(lex, lexer.EQ)
+		if err != nil {
+			return err
+		}
+
+		p.skipLexItem(lex, lexer.WHITESPACE)
+
+		item, err = p.readLexItem(lex, lexer.STRING, lexer.IDENT)
+		if err != nil {
+			return err
+		}
+
+		switch fieldName {
+		case "message":
+			errorDef.Message = item.Literal
+		case "code":
+			var v uint64
+			_, err = fmt.Sscanf(item.Literal, "%d", &v)
+			if err != nil {
+				return fmt.Errorf("invalid code value %q: %w", item.Literal, err)
+			}
+			errorDef.Code = v
+		case "http_code":
+			var v uint64
+			_, err = fmt.Sscanf(item.Literal, "%d", &v)
+			if err != nil {
+				return fmt.Errorf("invalid http_code value %q: %w", item.Literal, err)
+			}
+			errorDef.HttpCode = v
+		}
+
+	}
+
+	source.Errors = append(source.Errors, errorDef)
+
+	return nil
 }
 
 func (p *Parser) parseInclude(lex *lexer.Reader, source *def.SourceOrigin) error {

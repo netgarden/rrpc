@@ -69,7 +69,7 @@ func (p *Processor) sourceOriginToSource(module *def.Module, sourceOrigin *def.S
 	for _, serviceDef := range sourceOrigin.Services {
 
 		serviceDef.Path = serviceDef.Name
-		pathAnnotation := p.getAnnotationValue(serviceDef.Annotations, "path")
+		pathAnnotation := p.getAnnotationValue(serviceDef.Annotations, "Path")
 		if pathAnnotation != "" {
 			serviceDef.Path = pathAnnotation
 		}
@@ -80,7 +80,7 @@ func (p *Processor) sourceOriginToSource(module *def.Module, sourceOrigin *def.S
 		for _, methodDef := range serviceDef.Methods {
 
 			methodDef.Path = methodDef.Name
-			pathAnnotation := p.getAnnotationValue(methodDef.Annotations, "path")
+			pathAnnotation := p.getAnnotationValue(methodDef.Annotations, "Path")
 			if pathAnnotation != "" {
 				methodDef.Path = pathAnnotation
 			}
@@ -98,27 +98,6 @@ func (p *Processor) sourceOriginToSource(module *def.Module, sourceOrigin *def.S
 				)
 			}
 
-			var methodHasStructInput bool
-			var methodHasBytesInput bool
-			for _, inputDef := range methodDef.Inputs {
-
-				if inputDef.IsStruct {
-					methodHasStructInput = true
-
-				} else if inputDef.Type == "bytes" {
-					methodHasBytesInput = true
-
-				}
-
-			}
-
-			if methodHasStructInput && methodHasBytesInput {
-				methodDef.ContentType = "multipart/form-data"
-			} else if methodHasStructInput {
-				methodDef.ContentType = "application/json"
-			} else if methodHasBytesInput {
-				methodDef.ContentType = "application/octet-stream"
-			}
 
 		}
 
@@ -356,6 +335,22 @@ func (p *Processor) computeModuleData(module *def.Module) error {
 				if slices.Contains(structNames, outputDef.Type) {
 					outputDef.IsStruct = true
 				}
+			}
+
+			var hasStructInput, hasBytesInput bool
+			for _, inputDef := range methodDef.Inputs {
+				if inputDef.IsStruct {
+					hasStructInput = true
+				} else if inputDef.Type == "bytes" {
+					hasBytesInput = true
+				}
+			}
+			if hasStructInput && hasBytesInput {
+				methodDef.ContentType = "multipart/form-data"
+			} else if hasStructInput {
+				methodDef.ContentType = "application/json"
+			} else if hasBytesInput {
+				methodDef.ContentType = "application/octet-stream"
 			}
 		}
 	}
