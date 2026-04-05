@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-var numberRrpcTypes = []string{"int", "int8", "int16", "int32", "int64", "uint", "uint8", "uint16", "uint32", "uint64", "float32", "float64", "byte"}
+var numberRrpcTypes = []string{"int", "int8", "int16", "int32", "int64", "uint", "uint8", "uint16", "uint32", "uint64", "float", "float32", "float64", "byte"}
 
 func rrpcDataTypeToTSType(dataType string) string {
 
@@ -19,7 +19,7 @@ func rrpcDataTypeToTSType(dataType string) string {
 		return "number"
 	}
 
-	if dataType == "[]byte" {
+	if dataType == "bytes" {
 		return "Uint8Array"
 	}
 
