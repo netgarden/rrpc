@@ -76,12 +76,6 @@ func (g *Generator) Generate(definition *def.Module, targetDir string) error {
 		return err
 	}
 
-	errorsTpl := baseTpl.Lookup("rrpcErrors.tpl")
-	err = g.executeDefinitionTemplate(errorsTpl, filepath.Join(targetDir, "rrpc.errors.gen.go"), definition)
-	if err != nil {
-		return err
-	}
-
 	return nil
 }
 

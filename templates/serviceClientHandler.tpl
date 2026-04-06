@@ -63,7 +63,7 @@ func (h *{{ firstLetterToUpper $service.Name }}ServiceClientHandler) {{ firstLet
 
     err = json.Unmarshal(respBody, out)
     if err != nil {
-        return nil, ErrRrpcBadResponse.WithCausef("failed to read unmarshal body: %w", err)
+        return nil, rrpc.ErrRrpcBadResponse.WithCausef("failed to read unmarshal body: %w", err)
     }
 
     {{ end -}}
@@ -81,7 +81,7 @@ func (h *{{ firstLetterToUpper $service.Name }}ServiceClientHandler) doHttpReque
 
         reqBody, err := json.Marshal(in)
         if err != nil {
-            return nil, ErrRrpcBadRequest.WithCausef("failed to marshal json request: %w", err)
+            return nil, rrpc.ErrRrpcBadRequest.WithCausef("failed to marshal json request: %w", err)
         }
 
         reqBodyBuffer = bytes.NewBuffer(reqBody)
@@ -89,7 +89,7 @@ func (h *{{ firstLetterToUpper $service.Name }}ServiceClientHandler) doHttpReque
 
     req, err := http.NewRequest(method, url, reqBodyBuffer)
     if err != nil {
-       	return nil, ErrRrpcBadRequest.WithCausef("failed to create http request: %w", err)
+       	return nil, rrpc.ErrRrpcBadRequest.WithCausef("failed to create http request: %w", err)
     }
 
     if ctx != nil {
@@ -104,7 +104,7 @@ func (h *{{ firstLetterToUpper $service.Name }}ServiceClientHandler) doHttpReque
 
     resp, err := h.client.Do(req)
     if err != nil {
-        return nil, ErrRrpcRequestFailed.WithCause(err)
+        return nil, rrpc.ErrRrpcRequestFailed.WithCause(err)
     }
 
     if resp.StatusCode != 200 {
@@ -115,15 +115,12 @@ func (h *{{ firstLetterToUpper $service.Name }}ServiceClientHandler) doHttpReque
             return nil, err
         }
 
-        var rpcErr RRPCError
+        var rpcErr rrpc.RRPCError
 		if err := json.Unmarshal(respBody, &rpcErr); err != nil {
-			return nil, ErrRrpcBadResponse.WithCausef("failed to unmarshal server error: %w", err)
-		}
-		if rpcErr.Cause != "" {
-			rpcErr.cause = errors.New(rpcErr.Cause)
+			return nil, rrpc.ErrRrpcBadResponse.WithCausef("failed to unmarshal server error: %w", err)
 		}
 
-		return nil, rpcErr
+		return nil, rpcErr.WithCauseString()
     }
 
     var ret *SizedReadCloser
@@ -133,7 +130,7 @@ func (h *{{ firstLetterToUpper $service.Name }}ServiceClientHandler) doHttpReque
 
         contentLength, err := strconv.ParseInt(contentLengthStr, 10, 64)
         if err != nil {
-            return nil, ErrRrpcBadResponse.WithCausef("failed to parse Content-Length header: %w", err)
+            return nil, rrpc.ErrRrpcBadResponse.WithCausef("failed to parse Content-Length header: %w", err)
         }
 
         ret = NewSizedReadCloser(resp.Body, contentLength)
@@ -145,7 +142,7 @@ func (h *{{ firstLetterToUpper $service.Name }}ServiceClientHandler) doHttpReque
 func (h *{{ firstLetterToUpper $service.Name }}ServiceClientHandler) readAll(r io.Reader) ([]byte, error) {
     b, err := io.ReadAll(r)
     if err != nil {
-        return nil, ErrRrpcBadResponse.WithCausef("failed to read server response body: %w", err)
+        return nil, rrpc.ErrRrpcBadResponse.WithCausef("failed to read server response body: %w", err)
     }
     return b, nil
 }

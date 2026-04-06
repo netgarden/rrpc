@@ -14,6 +14,9 @@
     {{- $goImports = append $goImports "github.com/netgarden/rrpc" -}}
     {{- if $needsIo -}}{{- $goImports = append $goImports "io" -}}{{- end -}}
 {{- end -}}
+{{- if and (eq (len .Services) 0) (gt (len .Errors) 0) -}}
+    {{- $goImports = append $goImports "github.com/netgarden/rrpc" -}}
+{{- end -}}
 package {{ if index .Options "go_package" }}{{ .Options.go_package }}{{ else }}rpc{{ end }}
 
 {{ if gt (len $goImports) 0 -}}
