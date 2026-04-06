@@ -90,7 +90,18 @@ func (p *Processor) sourceOriginToSource(module *def.Module, sourceOrigin *def.S
 				methodDef.Type = typeAnnotation
 			}
 
-			if methodDef.Type != "POST" && methodDef.Type != "PUT" && len(methodDef.Inputs) > 0 {
+			if methodDef.Type == "GET" || methodDef.Type == "HEAD" || methodDef.Type == "DELETE" {
+				for _, input := range methodDef.Inputs {
+					if input.Type == "bytes" {
+						return nil, fmt.Errorf(
+							"method %s.%s: bytes input is not allowed for %s methods",
+							serviceDef.Name,
+							methodDef.Name,
+							methodDef.Type,
+						)
+					}
+				}
+			} else if methodDef.Type != "POST" && methodDef.Type != "PUT" && len(methodDef.Inputs) > 0 {
 				return nil, fmt.Errorf(
 					"method %s.%s has inputs but type is not POST or PUT",
 					serviceDef.Name,

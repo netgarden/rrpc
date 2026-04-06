@@ -2,6 +2,7 @@ package parser
 
 import (
 	"fmt"
+	"slices"
 
 	def "github.com/netgarden/rrpc-def"
 )
@@ -92,5 +93,31 @@ func (v *Validator) validateMethod(service *def.Service, method *def.Method) err
 		)
 	}
 
+	if method.Type == "GET" || method.Type == "HEAD" || method.Type == "DELETE" {
+		for _, inputDef := range method.Inputs {
+			if inputDef.IsStruct {
+				if err := v.validateQueryParamStruct(service, method, inputDef); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+func (v *Validator) validateQueryParamStruct(service *def.Service, method *def.Method, input *def.Field) error {
+	structDef, ok := service.Source.Module.Structs[input.Type]
+	if !ok {
+		return fmt.Errorf("method %s.%s: struct type %s not found", service.Name, method.Name, input.Type)
+	}
+	for _, field := range structDef.Fields {
+		if !slices.Contains(SupportedPrimitiveTypes, field.Type) && field.Type != "bytes" {
+			return fmt.Errorf(
+				"method %s.%s: struct %s field %s must be a primitive type for %s methods, got %s",
+				service.Name, method.Name, input.Type, field.Name, method.Type, field.Type,
+			)
+		}
+	}
 	return nil
 }
