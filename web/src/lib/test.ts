@@ -35,9 +35,14 @@ class PingerServiceHandler {
         const method = "GET";
         const methodPath = "Ping";
         const uri = ('/' + this._path + '/' + methodPath).replace(/\/+/g, '/');
+
         let reqUri : string = uri;
         let reqBody : string | Uint8Array | null = null;
+
         const res : RRPCResponse = await this._client.sendRequest(method, reqUri, reqBody);
+        if (res.error != null) {
+            this.handleError(res.error);
+        }
 
         return;
     }
@@ -60,16 +65,20 @@ class StaticServiceHandler {
         const method = "GET";
         const methodPath = "/" + encodeURIComponent(filepath);
         const uri = ('/' + this._path + '/' + methodPath).replace(/\/+/g, '/');
+
         let reqUri : string = uri;
         let reqBody : string | Uint8Array | null = null;
+
         const res : RRPCResponse = await this._client.sendRequest(method, reqUri, reqBody);
+        if (res.error != null) {
+            this.handleError(res.error);
+        }
+
         const ret : Uint8Array = new Uint8Array(await res.response.arrayBuffer());
 
         return ret;
     }
 
 }
-
-
 
 

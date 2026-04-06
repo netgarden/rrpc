@@ -1,9 +1,24 @@
-export interface RRPCError {
-    error: string;
-    code: number;
-    msg: string;
-    cause?: string;
-    status: number;
+export class RRPCError {
+
+    public error: string;
+    public code: number;
+    public message: string;
+    public cause: string | null;
+
+    constructor(error : string, code : number, message : string, cause : string | null) {
+        this.error = error;
+        this.code = code;
+        this.message = message;
+        this.cause = cause;
+    }
+
+}
+
+interface ErrorData {
+    error : string
+    code : number
+    msg : string
+    cause? : string
 }
 
 export class RRPCClient {
@@ -39,13 +54,23 @@ export class RRPCClient {
         if (resp.status >= 400) {
             const contentType : string = resp.headers.get('Content-Type') ?? '';
             if (contentType.includes('application/problem+json')) {
-                const errBody = await resp.json();
-                throw errBody;
+                const errObj : ErrorData = await resp.json();
+                this.handleError(errObj);
             }
             throw new UnexpectedReturnCodeError(resp.status, resp.statusText);
         }
 
         return new RRPCResponse(resp);
+    }
+
+    private handleError(error : ErrorData) : void {
+        console.log("Error:", error);
+        throw new RRPCError(
+            error.error,
+            error.code,
+            error.msg,
+            error.cause ? error.cause : null
+        );
     }
 
 }

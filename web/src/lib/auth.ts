@@ -33,10 +33,17 @@ class AuthServiceHandler {
         const method = "POST";
         const methodPath = "login";
         const uri = ('/' + this._path + '/' + methodPath).replace(/\/+/g, '/');
+
         let reqUri : string = uri;
         let reqBody : string | Uint8Array | null = null;
+
         reqBody = JSON.stringify(request);
+
         const res : RRPCResponse = await this._client.sendRequest(method, reqUri, reqBody);
+        if (res.error != null) {
+            this.handleError(res.error);
+        }
+
         const ret : LoginResponse = await res.response.json();
 
         return ret;
@@ -47,9 +54,14 @@ class AuthServiceHandler {
         const method = "POST";
         const methodPath = "logout";
         const uri = ('/' + this._path + '/' + methodPath).replace(/\/+/g, '/');
+
         let reqUri : string = uri;
         let reqBody : string | Uint8Array | null = null;
+
         const res : RRPCResponse = await this._client.sendRequest(method, reqUri, reqBody);
+        if (res.error != null) {
+            this.handleError(res.error);
+        }
 
         return;
     }
@@ -61,19 +73,8 @@ class AuthServiceHandler {
 class LoginRequest {
     username: string;
     password: string;
-    
 }
 
 class LoginResponse {
     ok: boolean;
-    
-}
-
-
-export class AuthenticationError extends Error {
-    code: number = 1;
-    status: number = 401;
-    constructor() {
-        super("authentication failed")
-    }
 }

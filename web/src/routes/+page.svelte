@@ -3,12 +3,13 @@
     import { TestClient } from '$lib/test';
     import { FilesClient } from '$lib/files';
     import { EchoClient } from '$lib/echo';
-    import type { RRPCError } from '$lib/rrpc';
+    import { RRPCError } from '$lib/rrpc';
 
     function errMsg(e: unknown): string {
-        if (e instanceof Error) return e.message;
-        if (typeof e === 'object' && e !== null && 'msg' in e) return (e as RRPCError).msg;
-        return errMsg(e);
+        if (e instanceof Error || e instanceof RRPCError) {
+            return e.message;
+        }
+        return JSON.parse(JSON.stringify(e));
     }
 
     const apiUrl = '';
@@ -47,7 +48,6 @@
             const res = await authClient.authService.login({ username, password });
             loginResult = res.ok ? 'Login successful' : 'Login failed';
         } catch (e) {
-            console.log("Error: ", e);
             loginError = errMsg(e);
         }
     }

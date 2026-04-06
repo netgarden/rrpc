@@ -33,8 +33,10 @@ class EchoServiceHandler {
         const method = "GET";
         const methodPath = "Echo";
         const uri = ('/' + this._path + '/' + methodPath).replace(/\/+/g, '/');
+
         let reqUri : string = uri;
         let reqBody : string | Uint8Array | null = null;
+
         const queryParams = new URLSearchParams();
         for (const [key, value] of Object.entries(request as Record<string, unknown>)) {
             if (value === null || value === undefined) continue;
@@ -45,7 +47,12 @@ class EchoServiceHandler {
             }
         }
         reqUri = uri + '?' + queryParams.toString();
+
         const res : RRPCResponse = await this._client.sendRequest(method, reqUri, reqBody);
+        if (res.error != null) {
+            this.handleError(res.error);
+        }
+
         const ret : EchoResponse = await res.response.json();
 
         return ret;
@@ -59,12 +66,8 @@ class EchoRequest {
     message: string;
     count: number;
     flag: boolean;
-    
 }
 
 class EchoResponse {
     result: string;
-    
 }
-
-

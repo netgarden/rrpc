@@ -14,8 +14,8 @@ struct LoginResponse {
 
 error AuthenticationError {
     code = 1
-    message = "authentication failed"
     http_code = 401
+    message = "authentication failed"
 }
 
 service Auth {
