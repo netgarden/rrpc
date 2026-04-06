@@ -15,14 +15,15 @@ class {{ firstLetterToUpper .Name }}ServiceHandler {
     {{- $pathParams := methodPathParams $method.Path }}
 
     async {{ firstLetterToLower $method.Name }}(
-    {{- range $i, $p := $pathParams }}{{ $p }}: string, {{ end -}}
+    {{- range $i, $p := $pathParams }}{{ if $i }}, {{ end }}{{ $p }}: string{{ end -}}
+    {{- if and (gt (len $pathParams) 0) (gt (len $method.Inputs) 0) }}, {{ end -}}
     {{- range $i, $input := $method.Inputs -}}
-    {{ firstLetterToLower $input.Name }}: {{ if $input.IsStruct }}{{ firstLetterToUpper $input.Type }}{{ else }}any{{ end }}
+    {{ firstLetterToLower $input.Name }}: {{ if $input.IsStruct }}{{ firstLetterToUpper $input.Type }}{{ else if eq $input.Type "bytes" }}string | Uint8Array{{ else }}{{ rrpcDataTypeToTSType $input.Type }}{{ end }}
     {{- if not (isLast $i $method.Inputs ) }}, {{ end }}
     {{- end -}}
     ) : Promise<{{ if gt (len $method.Outputs) 0 -}}
     {{- range $i, $output := $method.Outputs -}}
-    {{- if $output.IsStruct }}{{ firstLetterToUpper $output.Type }}{{ else }}any{{ end }}
+    {{- if $output.IsStruct }}{{ firstLetterToUpper $output.Type }}{{ else }}{{ rrpcDataTypeToTSType $output.Type }}{{ end }}
     {{- if not (isLast $i $method.Outputs ) }}, {{ end }}
     {{- end -}}
     {{- else -}}void
@@ -32,33 +33,49 @@ class {{ firstLetterToUpper .Name }}ServiceHandler {
         const methodPath = {{ methodPathToTS $method.Path }};
         const uri = ('/' + this._path + '/' + methodPath).replace(/\/+/g, '/');
 
-        {{ if and (eq (len $method.Inputs) 1) ((index $method.Inputs 0).IsStruct) -}}
-        const reqDataStr : string = JSON.stringify({{ firstLetterToLower (index $method.Inputs 0).Name }});
-
+        {{- $getWithStruct := false -}}
+        {{- if eq $method.Type "GET" -}}{{- if and (eq (len $method.Inputs) 1) ((index $method.Inputs 0).IsStruct) -}}{{- $getWithStruct = true -}}{{- end -}}{{- end }}
+        {{- $singleBytes := false -}}
+        {{- if and (eq (len $method.Inputs) 1) (eq (index $method.Inputs 0).Type "bytes") -}}{{- $singleBytes = true -}}{{- end }}
+        let reqUri : string = uri;
+        let reqBody : string | Uint8Array | null = null;
+        {{ if $getWithStruct -}}
+        const queryParams = new URLSearchParams();
+        for (const [key, value] of Object.entries({{ firstLetterToLower (index $method.Inputs 0).Name }} as Record<string, unknown>)) {
+            if (value === null || value === undefined) continue;
+            if (value instanceof Uint8Array) {
+                queryParams.set(key, btoa(String.fromCharCode(...value)));
+            } else {
+                queryParams.set(key, String(value));
+            }
+        }
+        reqUri = uri + '?' + queryParams.toString();
+        {{ else if $singleBytes -}}
+        reqBody = {{ firstLetterToLower (index $method.Inputs 0).Name }};
+        {{ else if and (eq (len $method.Inputs) 1) ((index $method.Inputs 0).IsStruct) -}}
+        reqBody = JSON.stringify({{ firstLetterToLower (index $method.Inputs 0).Name }});
         {{ else if gt (len $method.Inputs) 0 -}}
-        const reqData = {
+        reqBody = JSON.stringify({
             {{- range $i, $input := $method.Inputs }}
             '{{ $input.Name }}': {{ firstLetterToLower $input.Name }},
             {{- end }}
-        };
-
-        const reqDataStr : string = JSON.stringify(reqData);
-
+        });
         {{ end -}}
-        const res : RRPCResponse = await this._client.sendRequest(method, uri, {{ if gt (len $method.Inputs) 0 }}reqDataStr{{ else }}null{{ end }});
+        const res : RRPCResponse = await this._client.sendRequest(method, reqUri, reqBody);
 
         {{- range $i, $output := $method.Outputs }}
         {{- if $output.IsStruct }}
-        const obj : {{ firstLetterToUpper $output.Type }} = await res.response.json();
+        const ret : {{ firstLetterToUpper $output.Type }} = await res.response.json();
         {{- else if eq $output.Type "bytes" }}
-        const bytes : any = await res.response.text();
+        const ret : Uint8Array = new Uint8Array(await res.response.arrayBuffer());
+        {{- else if eq $output.Type "string" }}
+        const ret : string = await res.response.text();
         {{- end }}
         {{- end }}
 
         return
         {{- range $i, $output := $method.Outputs }}
-        {{- if $output.IsStruct }} obj
-        {{- else if eq $output.Type "bytes" }} bytes
+        {{- if or $output.IsStruct (ne $output.Type "") }} ret
         {{- end -}}
         {{- if not (isLast $i $method.Outputs ) }}, {{ end }}
         {{- end -}}
