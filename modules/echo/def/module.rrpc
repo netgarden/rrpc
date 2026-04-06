@@ -1,0 +1,20 @@
+name = "echo"
+version = "0.0.1"
+
+option go_package = "echo"
+
+struct EchoRequest {
+    message string
+    count int
+    flag bool
+}
+
+struct EchoResponse {
+    result string
+}
+
+@Path("/echo")
+service Echo {
+    @method("GET")
+    Echo(request EchoRequest) (EchoResponse)
+}

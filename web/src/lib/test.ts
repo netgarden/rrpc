@@ -35,8 +35,9 @@ class PingerServiceHandler {
         const method = "GET";
         const methodPath = "Ping";
         const uri = ('/' + this._path + '/' + methodPath).replace(/\/+/g, '/');
-
-        const res : RRPCResponse = await this._client.sendRequest(method, uri, null);
+        let reqUri : string = uri;
+        let reqBody : string | Uint8Array | null = null;
+        const res : RRPCResponse = await this._client.sendRequest(method, reqUri, reqBody);
 
         return;
     }
@@ -54,16 +55,17 @@ class StaticServiceHandler {
         this._client = client;
     }
 
-    async serveStatic(filepath: string, ) : Promise<any> {
+    async serveStatic(filepath: string) : Promise<Uint8Array> {
 
         const method = "GET";
         const methodPath = "/" + encodeURIComponent(filepath);
         const uri = ('/' + this._path + '/' + methodPath).replace(/\/+/g, '/');
+        let reqUri : string = uri;
+        let reqBody : string | Uint8Array | null = null;
+        const res : RRPCResponse = await this._client.sendRequest(method, reqUri, reqBody);
+        const ret : Uint8Array = new Uint8Array(await res.response.arrayBuffer());
 
-        const res : RRPCResponse = await this._client.sendRequest(method, uri, null);
-        const bytes : any = await res.response.text();
-
-        return bytes;
+        return ret;
     }
 
 }

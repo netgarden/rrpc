@@ -2,12 +2,21 @@
     import { AuthClient } from '$lib/auth';
     import { TestClient } from '$lib/test';
     import { FilesClient } from '$lib/files';
+    import { EchoClient } from '$lib/echo';
+    import type { RRPCError } from '$lib/rrpc';
+
+    function errMsg(e: unknown): string {
+        if (e instanceof Error) return e.message;
+        if (typeof e === 'object' && e !== null && 'msg' in e) return (e as RRPCError).msg;
+        return errMsg(e);
+    }
 
     const apiUrl = '';
 
     const authClient = new AuthClient(apiUrl);
     const testClient = new TestClient(apiUrl);
     const filesClient = new FilesClient(apiUrl);
+    const echoClient = new EchoClient(apiUrl);
 
     let username = $state('');
     let password = $state('');
@@ -25,6 +34,12 @@
     let downloadResult = $state<string | null>(null);
     let downloadError = $state<string | null>(null);
 
+    let echoMessage = $state('hello');
+    let echoCount = $state(3);
+    let echoFlag = $state(true);
+    let echoResult = $state<string | null>(null);
+    let echoError = $state<string | null>(null);
+
     async function login() {
         loginResult = null;
         loginError = null;
@@ -32,7 +47,8 @@
             const res = await authClient.authService.login({ username, password });
             loginResult = res.ok ? 'Login successful' : 'Login failed';
         } catch (e) {
-            loginError = String(e);
+            console.log("Error: ", e);
+            loginError = errMsg(e);
         }
     }
 
@@ -43,7 +59,7 @@
             await authClient.authService.logout();
             loginResult = 'Logged out';
         } catch (e) {
-            loginError = String(e);
+            loginError = errMsg(e);
         }
     }
 
@@ -54,7 +70,7 @@
             await testClient.pingerService.ping();
             pingResult = 'Pong!';
         } catch (e) {
-            pingError = String(e);
+            pingError = errMsg(e);
         }
     }
 
@@ -67,7 +83,18 @@
             await filesClient.filesService.upload(uploadFile.name, new Uint8Array(arrayBuffer));
             uploadResult = `Uploaded "${uploadFile.name}"`;
         } catch (e) {
-            uploadError = String(e);
+            uploadError = errMsg(e);
+        }
+    }
+
+    async function echoSend() {
+        echoResult = null;
+        echoError = null;
+        try {
+            const res = await echoClient.echoService.echo({ message: echoMessage, count: echoCount, flag: echoFlag });
+            echoResult = res.result;
+        } catch (e) {
+            echoError = errMsg(e);
         }
     }
 
@@ -76,10 +103,10 @@
         downloadError = null;
         if (!downloadFilename.trim()) return;
         try {
-            const content = await filesClient.filesService.download(downloadFilename.trim());
-            downloadResult = content;
+            const bytes = await filesClient.filesService.download(downloadFilename.trim());
+            downloadResult = new TextDecoder().decode(bytes);
         } catch (e) {
-            downloadError = String(e);
+            downloadError = errMsg(e);
         }
     }
 </script>
@@ -116,6 +143,18 @@
         </div>
         {#if uploadResult}<p class="result">{uploadResult}</p>{/if}
         {#if uploadError}<p class="error">{uploadError}</p>{/if}
+    </section>
+
+    <section>
+        <h2>Echo (GET query params)</h2>
+        <div class="form">
+            <input type="text" bind:value={echoMessage} placeholder="Message" />
+            <input type="number" bind:value={echoCount} placeholder="Count" />
+            <label><input type="checkbox" bind:checked={echoFlag} /> Flag</label>
+            <button onclick={echoSend}>Send</button>
+        </div>
+        {#if echoResult}<p class="result">{echoResult}</p>{/if}
+        {#if echoError}<p class="error">{echoError}</p>{/if}
     </section>
 
     <section>

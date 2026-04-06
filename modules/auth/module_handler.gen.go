@@ -4,7 +4,6 @@ import (
     "bytes"
     "context"
     "encoding/json"
-    "errors"
     "io"
     "net/http"
     "strconv"
@@ -58,22 +57,20 @@ func (h *AuthServiceHandler) Methods() []rrpc.MethodHolder {
 
 func (h *AuthServiceHandler) handleLogin(ctx *rrpc.Context) error {
 
+	reqPayload := &LoginRequest{}
 	reqBody, err := h.readBody(ctx.Request())
 	if err != nil {
 		return err
 	}
-
-	reqPayload := &LoginRequest{}
 	if err := json.Unmarshal(reqBody, reqPayload); err != nil {
-		return ErrRrpcBadRequest.WithCausef("failed to unmarshal request data: %w", err)
+		return rrpc.ErrRrpcBadRequest.WithCausef("failed to unmarshal request data: %w", err)
 	}
-
 	// Call service method implementation.
     ret0, err1 := h.service.Login(ctx, reqPayload)
     if err1 != nil {
-    	rpcErr, ok := err1.(RRPCError)
+    	rpcErr, ok := err1.(rrpc.RRPCError)
     	if !ok {
-    		rpcErr = ErrRrpcEndpoint.WithCause(err1)
+    		rpcErr = rrpc.ErrRrpcEndpoint.WithCause(err1)
     	}
     	return rpcErr
     }
@@ -84,7 +81,7 @@ func (h *AuthServiceHandler) handleLogin(ctx *rrpc.Context) error {
     
 	respBody, err := json.Marshal(ret0)
 	if err != nil {
-		return ErrRrpcBadResponse.WithCausef("failed to marshal json response: %w", err)
+		return rrpc.ErrRrpcBadResponse.WithCausef("failed to marshal json response: %w", err)
 	}
 
     ctx.Response().Header().Set("Content-Type", "application/json")
@@ -100,9 +97,9 @@ func (h *AuthServiceHandler) handleLogout(ctx *rrpc.Context) error {
 	// Call service method implementation.
     err1 := h.service.Logout(ctx)
     if err1 != nil {
-    	rpcErr, ok := err1.(RRPCError)
+    	rpcErr, ok := err1.(rrpc.RRPCError)
     	if !ok {
-    		rpcErr = ErrRrpcEndpoint.WithCause(err1)
+    		rpcErr = rrpc.ErrRrpcEndpoint.WithCause(err1)
     	}
     	return rpcErr
     }
@@ -121,7 +118,7 @@ func (h *AuthServiceHandler) readBody(r *http.Request) ([]byte, error) {
 
     reqBody, err := io.ReadAll(r.Body)
 	if err != nil {
-	    return nil, ErrRrpcBadRequest.WithCausef("failed to read request data: %w", err)
+	    return nil, rrpc.ErrRrpcBadRequest.WithCausef("failed to read request data: %w", err)
 	}
 
     return reqBody, nil
@@ -164,7 +161,7 @@ func (h *AuthServiceClientHandler) Login(ctx context.Context, data *LoginRequest
 
     err = json.Unmarshal(respBody, out)
     if err != nil {
-        return nil, ErrRrpcBadResponse.WithCausef("failed to read unmarshal body: %w", err)
+        return nil, rrpc.ErrRrpcBadResponse.WithCausef("failed to read unmarshal body: %w", err)
     }
 
     return out, nil
@@ -195,7 +192,7 @@ func (h *AuthServiceClientHandler) doHttpRequest(ctx context.Context, method str
 
         reqBody, err := json.Marshal(in)
         if err != nil {
-            return nil, ErrRrpcBadRequest.WithCausef("failed to marshal json request: %w", err)
+            return nil, rrpc.ErrRrpcBadRequest.WithCausef("failed to marshal json request: %w", err)
         }
 
         reqBodyBuffer = bytes.NewBuffer(reqBody)
@@ -203,7 +200,7 @@ func (h *AuthServiceClientHandler) doHttpRequest(ctx context.Context, method str
 
     req, err := http.NewRequest(method, url, reqBodyBuffer)
     if err != nil {
-       	return nil, ErrRrpcBadRequest.WithCausef("failed to create http request: %w", err)
+       	return nil, rrpc.ErrRrpcBadRequest.WithCausef("failed to create http request: %w", err)
     }
 
     if ctx != nil {
@@ -218,7 +215,7 @@ func (h *AuthServiceClientHandler) doHttpRequest(ctx context.Context, method str
 
     resp, err := h.client.Do(req)
     if err != nil {
-        return nil, ErrRrpcRequestFailed.WithCause(err)
+        return nil, rrpc.ErrRrpcRequestFailed.WithCause(err)
     }
 
     if resp.StatusCode != 200 {
@@ -229,15 +226,12 @@ func (h *AuthServiceClientHandler) doHttpRequest(ctx context.Context, method str
             return nil, err
         }
 
-        var rpcErr RRPCError
+        var rpcErr rrpc.RRPCError
 		if err := json.Unmarshal(respBody, &rpcErr); err != nil {
-			return nil, ErrRrpcBadResponse.WithCausef("failed to unmarshal server error: %w", err)
-		}
-		if rpcErr.Cause != "" {
-			rpcErr.cause = errors.New(rpcErr.Cause)
+			return nil, rrpc.ErrRrpcBadResponse.WithCausef("failed to unmarshal server error: %w", err)
 		}
 
-		return nil, rpcErr
+		return nil, rpcErr.WithCauseString()
     }
 
     var ret *SizedReadCloser
@@ -247,7 +241,7 @@ func (h *AuthServiceClientHandler) doHttpRequest(ctx context.Context, method str
 
         contentLength, err := strconv.ParseInt(contentLengthStr, 10, 64)
         if err != nil {
-            return nil, ErrRrpcBadResponse.WithCausef("failed to parse Content-Length header: %w", err)
+            return nil, rrpc.ErrRrpcBadResponse.WithCausef("failed to parse Content-Length header: %w", err)
         }
 
         ret = NewSizedReadCloser(resp.Body, contentLength)
@@ -259,7 +253,7 @@ func (h *AuthServiceClientHandler) doHttpRequest(ctx context.Context, method str
 func (h *AuthServiceClientHandler) readAll(r io.Reader) ([]byte, error) {
     b, err := io.ReadAll(r)
     if err != nil {
-        return nil, ErrRrpcBadResponse.WithCausef("failed to read server response body: %w", err)
+        return nil, rrpc.ErrRrpcBadResponse.WithCausef("failed to read server response body: %w", err)
     }
     return b, nil
 }

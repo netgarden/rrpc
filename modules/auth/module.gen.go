@@ -26,7 +26,7 @@ type AuthService interface {
 
 
 var (
-    ErrAuthenticationError  = RRPCError{Code: 1, Name: "AuthenticationError", Message: "authentication failed", HTTPStatus: 401}
+    ErrAuthenticationError  = rrpc.RRPCError{Code: 1, Name: "AuthenticationError", Message: "authentication failed", HTTPStatus: 401}
 )
 
 

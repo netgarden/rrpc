@@ -13,13 +13,15 @@ export class RRPCClient {
         this._url = url;
     }
 
-    async sendRequest(method: string, uri: string, data: string | null): Promise<RRPCResponse> {
+    async sendRequest(method: string, uri: string, data: string | Uint8Array | null): Promise<RRPCResponse> {
 
         const headers : Record<string, string> = {
             'Accept': 'application/json',
         }
 
-        if (data != null && data !== "") {
+        if (data instanceof Uint8Array) {
+            headers['Content-Type'] = 'application/octet-stream';
+        } else if (data != null && data !== "") {
             headers['Content-Type'] = 'application/json';
         }
 

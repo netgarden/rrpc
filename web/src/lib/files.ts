@@ -28,33 +28,30 @@ class FilesServiceHandler {
         this._client = client;
     }
 
-    async upload(filename: string, data: any) : Promise<void> {
+    async upload(filename: string, data: string | Uint8Array) : Promise<void> {
 
         const method = "POST";
         const methodPath = "/upload/" + encodeURIComponent(filename);
         const uri = ('/' + this._path + '/' + methodPath).replace(/\/+/g, '/');
-
-        const reqData = {
-            'data': data,
-        };
-
-        const reqDataStr : string = JSON.stringify(reqData);
-
-        const res : RRPCResponse = await this._client.sendRequest(method, uri, reqDataStr);
+        let reqUri : string = uri;
+        let reqBody : string | Uint8Array | null = null;
+        reqBody = data;
+        const res : RRPCResponse = await this._client.sendRequest(method, reqUri, reqBody);
 
         return;
     }
 
-    async download(filename: string, ) : Promise<any> {
+    async download(filename: string) : Promise<Uint8Array> {
 
         const method = "GET";
         const methodPath = "/download/" + encodeURIComponent(filename);
         const uri = ('/' + this._path + '/' + methodPath).replace(/\/+/g, '/');
+        let reqUri : string = uri;
+        let reqBody : string | Uint8Array | null = null;
+        const res : RRPCResponse = await this._client.sendRequest(method, reqUri, reqBody);
+        const ret : Uint8Array = new Uint8Array(await res.response.arrayBuffer());
 
-        const res : RRPCResponse = await this._client.sendRequest(method, uri, null);
-        const bytes : any = await res.response.text();
-
-        return bytes;
+        return ret;
     }
 
 }

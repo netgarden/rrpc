@@ -4,7 +4,6 @@ import (
     "bytes"
     "context"
     "encoding/json"
-    "errors"
     "io"
     "net/http"
     "strconv"
@@ -55,9 +54,9 @@ func (h *PingerServiceHandler) handlePing(ctx *rrpc.Context) error {
 	// Call service method implementation.
     err1 := h.service.Ping(ctx)
     if err1 != nil {
-    	rpcErr, ok := err1.(RRPCError)
+    	rpcErr, ok := err1.(rrpc.RRPCError)
     	if !ok {
-    		rpcErr = ErrRrpcEndpoint.WithCause(err1)
+    		rpcErr = rrpc.ErrRrpcEndpoint.WithCause(err1)
     	}
     	return rpcErr
     }
@@ -76,7 +75,7 @@ func (h *PingerServiceHandler) readBody(r *http.Request) ([]byte, error) {
 
     reqBody, err := io.ReadAll(r.Body)
 	if err != nil {
-	    return nil, ErrRrpcBadRequest.WithCausef("failed to read request data: %w", err)
+	    return nil, rrpc.ErrRrpcBadRequest.WithCausef("failed to read request data: %w", err)
 	}
 
     return reqBody, nil
@@ -121,7 +120,7 @@ func (h *PingerServiceClientHandler) doHttpRequest(ctx context.Context, method s
 
         reqBody, err := json.Marshal(in)
         if err != nil {
-            return nil, ErrRrpcBadRequest.WithCausef("failed to marshal json request: %w", err)
+            return nil, rrpc.ErrRrpcBadRequest.WithCausef("failed to marshal json request: %w", err)
         }
 
         reqBodyBuffer = bytes.NewBuffer(reqBody)
@@ -129,7 +128,7 @@ func (h *PingerServiceClientHandler) doHttpRequest(ctx context.Context, method s
 
     req, err := http.NewRequest(method, url, reqBodyBuffer)
     if err != nil {
-       	return nil, ErrRrpcBadRequest.WithCausef("failed to create http request: %w", err)
+       	return nil, rrpc.ErrRrpcBadRequest.WithCausef("failed to create http request: %w", err)
     }
 
     if ctx != nil {
@@ -144,7 +143,7 @@ func (h *PingerServiceClientHandler) doHttpRequest(ctx context.Context, method s
 
     resp, err := h.client.Do(req)
     if err != nil {
-        return nil, ErrRrpcRequestFailed.WithCause(err)
+        return nil, rrpc.ErrRrpcRequestFailed.WithCause(err)
     }
 
     if resp.StatusCode != 200 {
@@ -155,15 +154,12 @@ func (h *PingerServiceClientHandler) doHttpRequest(ctx context.Context, method s
             return nil, err
         }
 
-        var rpcErr RRPCError
+        var rpcErr rrpc.RRPCError
 		if err := json.Unmarshal(respBody, &rpcErr); err != nil {
-			return nil, ErrRrpcBadResponse.WithCausef("failed to unmarshal server error: %w", err)
-		}
-		if rpcErr.Cause != "" {
-			rpcErr.cause = errors.New(rpcErr.Cause)
+			return nil, rrpc.ErrRrpcBadResponse.WithCausef("failed to unmarshal server error: %w", err)
 		}
 
-		return nil, rpcErr
+		return nil, rpcErr.WithCauseString()
     }
 
     var ret *SizedReadCloser
@@ -173,7 +169,7 @@ func (h *PingerServiceClientHandler) doHttpRequest(ctx context.Context, method s
 
         contentLength, err := strconv.ParseInt(contentLengthStr, 10, 64)
         if err != nil {
-            return nil, ErrRrpcBadResponse.WithCausef("failed to parse Content-Length header: %w", err)
+            return nil, rrpc.ErrRrpcBadResponse.WithCausef("failed to parse Content-Length header: %w", err)
         }
 
         ret = NewSizedReadCloser(resp.Body, contentLength)
@@ -185,7 +181,7 @@ func (h *PingerServiceClientHandler) doHttpRequest(ctx context.Context, method s
 func (h *PingerServiceClientHandler) readAll(r io.Reader) ([]byte, error) {
     b, err := io.ReadAll(r)
     if err != nil {
-        return nil, ErrRrpcBadResponse.WithCausef("failed to read server response body: %w", err)
+        return nil, rrpc.ErrRrpcBadResponse.WithCausef("failed to read server response body: %w", err)
     }
     return b, nil
 }
@@ -234,9 +230,9 @@ func (h *StaticServiceHandler) handleServeStatic(ctx *rrpc.Context) error {
     // Call service method implementation.
     err1 := h.service.ServeStatic(ctx, w1)
     if err1 != nil {
-    	rpcErr, ok := err1.(RRPCError)
+    	rpcErr, ok := err1.(rrpc.RRPCError)
     	if !ok {
-    		rpcErr = ErrRrpcEndpoint.WithCause(err1)
+    		rpcErr = rrpc.ErrRrpcEndpoint.WithCause(err1)
     	}
     	return rpcErr
     }
@@ -257,7 +253,7 @@ func (h *StaticServiceHandler) readBody(r *http.Request) ([]byte, error) {
 
     reqBody, err := io.ReadAll(r.Body)
 	if err != nil {
-	    return nil, ErrRrpcBadRequest.WithCausef("failed to read request data: %w", err)
+	    return nil, rrpc.ErrRrpcBadRequest.WithCausef("failed to read request data: %w", err)
 	}
 
     return reqBody, nil
@@ -302,7 +298,7 @@ func (h *StaticServiceClientHandler) doHttpRequest(ctx context.Context, method s
 
         reqBody, err := json.Marshal(in)
         if err != nil {
-            return nil, ErrRrpcBadRequest.WithCausef("failed to marshal json request: %w", err)
+            return nil, rrpc.ErrRrpcBadRequest.WithCausef("failed to marshal json request: %w", err)
         }
 
         reqBodyBuffer = bytes.NewBuffer(reqBody)
@@ -310,7 +306,7 @@ func (h *StaticServiceClientHandler) doHttpRequest(ctx context.Context, method s
 
     req, err := http.NewRequest(method, url, reqBodyBuffer)
     if err != nil {
-       	return nil, ErrRrpcBadRequest.WithCausef("failed to create http request: %w", err)
+       	return nil, rrpc.ErrRrpcBadRequest.WithCausef("failed to create http request: %w", err)
     }
 
     if ctx != nil {
@@ -325,7 +321,7 @@ func (h *StaticServiceClientHandler) doHttpRequest(ctx context.Context, method s
 
     resp, err := h.client.Do(req)
     if err != nil {
-        return nil, ErrRrpcRequestFailed.WithCause(err)
+        return nil, rrpc.ErrRrpcRequestFailed.WithCause(err)
     }
 
     if resp.StatusCode != 200 {
@@ -336,15 +332,12 @@ func (h *StaticServiceClientHandler) doHttpRequest(ctx context.Context, method s
             return nil, err
         }
 
-        var rpcErr RRPCError
+        var rpcErr rrpc.RRPCError
 		if err := json.Unmarshal(respBody, &rpcErr); err != nil {
-			return nil, ErrRrpcBadResponse.WithCausef("failed to unmarshal server error: %w", err)
-		}
-		if rpcErr.Cause != "" {
-			rpcErr.cause = errors.New(rpcErr.Cause)
+			return nil, rrpc.ErrRrpcBadResponse.WithCausef("failed to unmarshal server error: %w", err)
 		}
 
-		return nil, rpcErr
+		return nil, rpcErr.WithCauseString()
     }
 
     var ret *SizedReadCloser
@@ -354,7 +347,7 @@ func (h *StaticServiceClientHandler) doHttpRequest(ctx context.Context, method s
 
         contentLength, err := strconv.ParseInt(contentLengthStr, 10, 64)
         if err != nil {
-            return nil, ErrRrpcBadResponse.WithCausef("failed to parse Content-Length header: %w", err)
+            return nil, rrpc.ErrRrpcBadResponse.WithCausef("failed to parse Content-Length header: %w", err)
         }
 
         ret = NewSizedReadCloser(resp.Body, contentLength)
@@ -366,7 +359,7 @@ func (h *StaticServiceClientHandler) doHttpRequest(ctx context.Context, method s
 func (h *StaticServiceClientHandler) readAll(r io.Reader) ([]byte, error) {
     b, err := io.ReadAll(r)
     if err != nil {
-        return nil, ErrRrpcBadResponse.WithCausef("failed to read server response body: %w", err)
+        return nil, rrpc.ErrRrpcBadResponse.WithCausef("failed to read server response body: %w", err)
     }
     return b, nil
 }

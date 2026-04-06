@@ -33,13 +33,13 @@ class AuthServiceHandler {
         const method = "POST";
         const methodPath = "login";
         const uri = ('/' + this._path + '/' + methodPath).replace(/\/+/g, '/');
+        let reqUri : string = uri;
+        let reqBody : string | Uint8Array | null = null;
+        reqBody = JSON.stringify(request);
+        const res : RRPCResponse = await this._client.sendRequest(method, reqUri, reqBody);
+        const ret : LoginResponse = await res.response.json();
 
-        const reqDataStr : string = JSON.stringify(request);
-
-        const res : RRPCResponse = await this._client.sendRequest(method, uri, reqDataStr);
-        const obj : LoginResponse = await res.response.json();
-
-        return obj;
+        return ret;
     }
 
     async logout() : Promise<void> {
@@ -47,8 +47,9 @@ class AuthServiceHandler {
         const method = "POST";
         const methodPath = "logout";
         const uri = ('/' + this._path + '/' + methodPath).replace(/\/+/g, '/');
-
-        const res : RRPCResponse = await this._client.sendRequest(method, uri, null);
+        let reqUri : string = uri;
+        let reqBody : string | Uint8Array | null = null;
+        const res : RRPCResponse = await this._client.sendRequest(method, reqUri, reqBody);
 
         return;
     }
