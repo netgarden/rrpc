@@ -9,20 +9,6 @@ var numberRrpcTypes = []string{"int", "int8", "int16", "int32", "int64", "uint",
 
 func rrpcDataTypeToTSType(dataType string) string {
 
-	if dataType == "bool" {
-		return "boolean"
-	}
-	if dataType == "string" {
-		return "string"
-	}
-	if slices.Contains(numberRrpcTypes, dataType) {
-		return "number"
-	}
-
-	if dataType == "bytes" {
-		return "Uint8Array"
-	}
-
 	if strings.HasPrefix(dataType, "[]") {
 		return rrpcDataTypeToTSType(dataType[2:]) + "[]"
 	}
@@ -31,5 +17,27 @@ func rrpcDataTypeToTSType(dataType string) string {
 		return "any"
 	}
 
+	if slices.Contains(numberRrpcTypes, dataType) {
+		return "number"
+	}
+
+	switch dataType {
+	case "string":
+		return "string"
+	case "bool":
+		return "boolean"
+	case "bytes":
+		return "Uint8Array"
+	}
+
 	panic("unsupported rrpc type: " + dataType)
+}
+
+func rrpcDataTypeToTSInputType(dataType string) string {
+
+	if dataType == "bytes" {
+		return "string | Uint8Array"
+	}
+
+	return rrpcDataTypeToTSType(dataType)
 }

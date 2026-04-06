@@ -1,15 +1,17 @@
 package rrpc_gen_ts
 
 import (
-	def "github.com/netgarden/rrpc-def"
 	"strings"
 	"text/template"
+
+	def "github.com/netgarden/rrpc-def"
 )
 
 func getTemplatesFuncs() template.FuncMap {
 
 	funcs := def.GetTemplateFuncMap()
 	funcs["rrpcDataTypeToTSType"] = rrpcDataTypeToTSType
+	funcs["rrpcDataTypeToTSInputType"] = rrpcDataTypeToTSInputType
 	funcs["methodPathParams"] = methodPathParams
 	funcs["methodPathToTS"] = methodPathToTS
 

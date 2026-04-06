@@ -9,5 +9,3 @@ import { RRPCClient, RRPCResponse, type RRPCError } from "$lib/rrpc";
 {{ range $_, $struct := .Structs }}
 {{ template "struct" $struct }}
 {{ end }}
-
-{{ template "errors" . }}
