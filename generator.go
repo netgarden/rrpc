@@ -23,6 +23,8 @@ func (g *Generator) Generate(definition *def.Module, targetDir string) error {
 
 	tplFuncs := def.GetTemplateFuncMap()
 	tplFuncs["createFieldDefaultValue"] = createFieldDefaultValue
+	tplFuncs["methodPathParams"] = methodPathParams
+	tplFuncs["methodPathToGo"] = methodPathToGo
 
 	baseTpl, err := template.New("").Funcs(tplFuncs).ParseFS(g.fs, "*.tpl")
 	if err != nil {

@@ -1,7 +1,11 @@
 {{- define "serviceClientHandler" }}
-{{- $service := . -}}
-{{- $serviceHasMultipart := false -}}
-{{- range $_, $method := .Methods -}}{{- if eq $method.ContentType "multipart/form-data" -}}{{- $serviceHasMultipart = true -}}{{- end -}}{{- end -}}
+{{- $service := . }}
+{{- $serviceHasMultipart := false }}
+{{- range $_, $method := .Methods }}
+    {{- if eq $method.ContentType "multipart/form-data" }}
+        {{- $serviceHasMultipart = true }}
+    {{- end }}
+{{- end -}}
 func new{{ firstLetterToUpper .Name }}ServiceClientHandler(client *Client) *{{ firstLetterToUpper .Name }}ServiceClientHandler {
     return &{{ firstLetterToUpper .Name }}ServiceClientHandler{
         client: client,
@@ -17,11 +21,13 @@ type {{ firstLetterToUpper .Name }}ServiceClientHandler struct {
 }
 
 {{ range $_, $method := .Methods -}}
-{{- $isMultipart := eq $method.ContentType "multipart/form-data" -}}
+{{ $isMultipart := eq $method.ContentType "multipart/form-data" -}}
+{{ $pathParams := methodPathParams $method.Path -}}
 func (h *{{ firstLetterToUpper $service.Name }}ServiceClientHandler) {{ firstLetterToUpper $method.Name -}}
         (ctx context.Context
+        {{- range $_, $p := $pathParams }}, {{ $p }} string{{ end -}}
         {{- range $_, $input := $method.Inputs -}}
-        , {{ if $input.IsStruct }}data *{{ $input.Type }}{{ else if eq $input.Type "bytes" }}r0 *SizedReader{{ end }}
+        , {{ if $input.IsStruct }}data *{{ $input.Type }}{{ else if eq $input.Type "bytes" }}r0 io.Reader{{ end }}
         {{- end -}}
     )
     {{- if gt (len $method.Outputs) 0 }} (
@@ -29,14 +35,23 @@ func (h *{{ firstLetterToUpper $service.Name }}ServiceClientHandler) {{ firstLet
             *{{ (index $method.Outputs 0).Type }}
         {{- else if eq (index $method.Outputs 0).Type "bytes" -}}
             *SizedReadCloser
+        {{- else if eq (index $method.Outputs 0).Type "string" -}}
+            string
         {{- end }}, error)
     {{- else -}}
         error
     {{- end }} {
 
     methodType := "{{ $method.Type }}"
-    methodPath := "{{ $method.Path }}"
+    methodPath := {{ methodPathToGo $method.Path }}
     url := h.client.url + "/" + h.path + "/" + methodPath
+
+    {{ if and (eq (len $method.Inputs) 1) (index $method.Inputs 0).IsStruct -}}
+    jsonBody, err := json.Marshal(data)
+    if err != nil {
+        return {{ range $_, $_ := $method.Outputs }}{{ if (index $method.Outputs 0).IsStruct }}nil{{ else if eq (index $method.Outputs 0).Type "string" }}""{{ else }}nil{{ end }}, {{ end }}rrpc.ErrRrpcBadRequest.WithCausef("failed to marshal request: %w", err)
+    }
+    {{ end -}}
 
     {{ if gt (len $method.Outputs) 0 }}r{{ else }}_{{ end }}, err :=
     {{- if $isMultipart }} h.doMultipartRequest(ctx, methodType, url,
@@ -45,7 +60,7 @@ func (h *{{ firstLetterToUpper $service.Name }}ServiceClientHandler) {{ firstLet
     {{- else }} h.doHttpRequest(ctx, methodType, url, "{{ $method.ContentType }}",
         {{- if eq (len $method.Inputs) 1 }}
             {{- if (index $method.Inputs 0).IsStruct -}}
-                data
+                bytes.NewBuffer(jsonBody)
             {{- else if eq (index $method.Inputs 0).Type "bytes" -}}
                 r0
             {{- end -}}
@@ -55,46 +70,41 @@ func (h *{{ firstLetterToUpper $service.Name }}ServiceClientHandler) {{ firstLet
     )
     {{- end }}
     if err != nil {
-        return {{ range $_, $_ := $method.Outputs }}nil, {{ end }}err
+        return {{ range $_, $_ := $method.Outputs }}{{ if (index $method.Outputs 0).IsStruct }}nil{{ else if eq (index $method.Outputs 0).Type "string" }}""{{ else }}nil{{ end }}, {{ end }}err
     }
 
-    {{ if and (eq (len $method.Outputs) 1) ((index $method.Outputs 0).IsStruct) -}}
+    {{ if eq (len $method.Outputs) 1 -}}
+    {{ if (index $method.Outputs 0).IsStruct -}}
     out := &{{ (index $method.Outputs 0).Type }}{}
-
     defer r.Close()
-
     respBody, err := h.readAll(r)
     if err != nil {
         return nil, err
     }
+    if err := json.Unmarshal(respBody, out); err != nil {
+        return nil, rrpc.ErrRrpcBadResponse.WithCausef("failed to unmarshal response: %w", err)
+    }
 
-    err = json.Unmarshal(respBody, out)
+    {{ else if eq (index $method.Outputs 0).Type "string" -}}
+    defer r.Close()
+    respBody, err := h.readAll(r)
     if err != nil {
-        return nil, rrpc.ErrRrpcBadResponse.WithCausef("failed to read unmarshal body: %w", err)
+        return "", err
     }
 
     {{ end -}}
+    {{ end -}}
 
-    return {{ if eq (len $method.Outputs) 1 }}{{ if (index $method.Outputs 0).IsStruct }}out{{ else if eq (index $method.Outputs 0).Type "bytes" }}r{{ end }}, {{ end }}nil
+    return {{ if eq (len $method.Outputs) 1 }}
+    {{- $output := (index $method.Outputs 0) -}}
+    {{- if $output.IsStruct }}out{{ else if eq $output.Type "bytes" }}r{{ else if eq $output.Type "string" }}string(respBody){{ end }}, {{ end }}nil
 }
 
 {{ end }}
 
-func (h *{{ firstLetterToUpper $service.Name }}ServiceClientHandler) doHttpRequest(ctx context.Context, method string, url string, contentType string, in interface{}) (*SizedReadCloser, error) {
+func (h *{{ firstLetterToUpper $service.Name }}ServiceClientHandler) doHttpRequest(ctx context.Context, method string, url string, contentType string, body io.Reader) (*SizedReadCloser, error) {
 
-    var reqBodyBuffer io.Reader = nil
-
-    if in != nil {
-
-        reqBody, err := json.Marshal(in)
-        if err != nil {
-            return nil, rrpc.ErrRrpcBadRequest.WithCausef("failed to marshal json request: %w", err)
-        }
-
-        reqBodyBuffer = bytes.NewBuffer(reqBody)
-    }
-
-    req, err := http.NewRequest(method, url, reqBodyBuffer)
+    req, err := http.NewRequest(method, url, body)
     if err != nil {
        	return nil, rrpc.ErrRrpcBadRequest.WithCausef("failed to create http request: %w", err)
     }
@@ -103,7 +113,7 @@ func (h *{{ firstLetterToUpper $service.Name }}ServiceClientHandler) doHttpReque
         req = req.WithContext(ctx)
     }
 
-    if in != nil {
+    if body != nil {
         req.Header.Set("Content-Type", contentType)
     }
 
