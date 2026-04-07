@@ -143,23 +143,23 @@ func (h *AuthServiceClientHandler) Login(ctx context.Context, data *LoginRequest
     methodPath := "login"
     url := h.client.url + "/" + h.path + "/" + methodPath
 
-    r, err := h.doHttpRequest(ctx, methodType, url, "application/json",data)
+    jsonBody, err := json.Marshal(data)
+    if err != nil {
+        return nil, rrpc.ErrRrpcBadRequest.WithCausef("failed to marshal request: %w", err)
+    }
+    r, err := h.doHttpRequest(ctx, methodType, url, "application/json",bytes.NewBuffer(jsonBody))
     if err != nil {
         return nil, err
     }
 
     out := &LoginResponse{}
-
     defer r.Close()
-
     respBody, err := h.readAll(r)
     if err != nil {
         return nil, err
     }
-
-    err = json.Unmarshal(respBody, out)
-    if err != nil {
-        return nil, rrpc.ErrRrpcBadResponse.WithCausef("failed to read unmarshal body: %w", err)
+    if err := json.Unmarshal(respBody, out); err != nil {
+        return nil, rrpc.ErrRrpcBadResponse.WithCausef("failed to unmarshal response: %w", err)
     }
 
     return out, nil
@@ -181,21 +181,9 @@ func (h *AuthServiceClientHandler) Logout(ctx context.Context)error {
 
 
 
-func (h *AuthServiceClientHandler) doHttpRequest(ctx context.Context, method string, url string, contentType string, in interface{}) (*SizedReadCloser, error) {
+func (h *AuthServiceClientHandler) doHttpRequest(ctx context.Context, method string, url string, contentType string, body io.Reader) (*SizedReadCloser, error) {
 
-    var reqBodyBuffer io.Reader = nil
-
-    if in != nil {
-
-        reqBody, err := json.Marshal(in)
-        if err != nil {
-            return nil, rrpc.ErrRrpcBadRequest.WithCausef("failed to marshal json request: %w", err)
-        }
-
-        reqBodyBuffer = bytes.NewBuffer(reqBody)
-    }
-
-    req, err := http.NewRequest(method, url, reqBodyBuffer)
+    req, err := http.NewRequest(method, url, body)
     if err != nil {
        	return nil, rrpc.ErrRrpcBadRequest.WithCausef("failed to create http request: %w", err)
     }
@@ -204,7 +192,7 @@ func (h *AuthServiceClientHandler) doHttpRequest(ctx context.Context, method str
         req = req.WithContext(ctx)
     }
 
-    if in != nil {
+    if body != nil {
         req.Header.Set("Content-Type", contentType)
     }
 

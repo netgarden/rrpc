@@ -4,9 +4,11 @@ import (
     "bytes"
     "context"
     "encoding/json"
+    "fmt"
     "io"
     "mime/multipart"
     "net/http"
+    "net/url"
     "strconv"
 
     "github.com/netgarden/rrpc"
@@ -162,10 +164,10 @@ type FilesServiceClientHandler struct {
     client *Client
 }
 
-func (h *FilesServiceClientHandler) Upload(ctx context.Context, r0 *SizedReader)error {
+func (h *FilesServiceClientHandler) Upload(ctx context.Context, filename string, r0 io.Reader)error {
 
     methodType := "PUT"
-    methodPath := "/upload/{filename:string}"
+    methodPath := fmt.Sprintf("/upload/%s", url.PathEscape(filename))
     url := h.client.url + "/" + h.path + "/" + methodPath
 
     _, err := h.doHttpRequest(ctx, methodType, url, "application/octet-stream",r0)
@@ -176,7 +178,7 @@ func (h *FilesServiceClientHandler) Upload(ctx context.Context, r0 *SizedReader)
     return nil
 }
 
-func (h *FilesServiceClientHandler) Upload2(ctx context.Context, data *UploadDataInfo, r0 *SizedReader)error {
+func (h *FilesServiceClientHandler) Upload2(ctx context.Context, data *UploadDataInfo, r0 io.Reader)error {
 
     methodType := "POST"
     methodPath := "/upload2"
@@ -190,10 +192,10 @@ func (h *FilesServiceClientHandler) Upload2(ctx context.Context, data *UploadDat
     return nil
 }
 
-func (h *FilesServiceClientHandler) Download(ctx context.Context) (*SizedReadCloser, error) {
+func (h *FilesServiceClientHandler) Download(ctx context.Context, filename string) (*SizedReadCloser, error) {
 
     methodType := "GET"
-    methodPath := "/download/{filename:string}"
+    methodPath := fmt.Sprintf("/download/%s", url.PathEscape(filename))
     url := h.client.url + "/" + h.path + "/" + methodPath
 
     r, err := h.doHttpRequest(ctx, methodType, url, "",nil)
@@ -206,21 +208,9 @@ func (h *FilesServiceClientHandler) Download(ctx context.Context) (*SizedReadClo
 
 
 
-func (h *FilesServiceClientHandler) doHttpRequest(ctx context.Context, method string, url string, contentType string, in interface{}) (*SizedReadCloser, error) {
+func (h *FilesServiceClientHandler) doHttpRequest(ctx context.Context, method string, url string, contentType string, body io.Reader) (*SizedReadCloser, error) {
 
-    var reqBodyBuffer io.Reader = nil
-
-    if in != nil {
-
-        reqBody, err := json.Marshal(in)
-        if err != nil {
-            return nil, rrpc.ErrRrpcBadRequest.WithCausef("failed to marshal json request: %w", err)
-        }
-
-        reqBodyBuffer = bytes.NewBuffer(reqBody)
-    }
-
-    req, err := http.NewRequest(method, url, reqBodyBuffer)
+    req, err := http.NewRequest(method, url, body)
     if err != nil {
        	return nil, rrpc.ErrRrpcBadRequest.WithCausef("failed to create http request: %w", err)
     }
@@ -229,7 +219,7 @@ func (h *FilesServiceClientHandler) doHttpRequest(ctx context.Context, method st
         req = req.WithContext(ctx)
     }
 
-    if in != nil {
+    if body != nil {
         req.Header.Set("Content-Type", contentType)
     }
 

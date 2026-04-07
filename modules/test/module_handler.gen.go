@@ -1,11 +1,12 @@
 package test
 
 import (
-    "bytes"
     "context"
     "encoding/json"
+    "fmt"
     "io"
     "net/http"
+    "net/url"
     "strconv"
 
     "github.com/netgarden/rrpc"
@@ -110,21 +111,9 @@ func (h *PingerServiceClientHandler) Ping(ctx context.Context)error {
 
 
 
-func (h *PingerServiceClientHandler) doHttpRequest(ctx context.Context, method string, url string, contentType string, in interface{}) (*SizedReadCloser, error) {
+func (h *PingerServiceClientHandler) doHttpRequest(ctx context.Context, method string, url string, contentType string, body io.Reader) (*SizedReadCloser, error) {
 
-    var reqBodyBuffer io.Reader = nil
-
-    if in != nil {
-
-        reqBody, err := json.Marshal(in)
-        if err != nil {
-            return nil, rrpc.ErrRrpcBadRequest.WithCausef("failed to marshal json request: %w", err)
-        }
-
-        reqBodyBuffer = bytes.NewBuffer(reqBody)
-    }
-
-    req, err := http.NewRequest(method, url, reqBodyBuffer)
+    req, err := http.NewRequest(method, url, body)
     if err != nil {
        	return nil, rrpc.ErrRrpcBadRequest.WithCausef("failed to create http request: %w", err)
     }
@@ -133,7 +122,7 @@ func (h *PingerServiceClientHandler) doHttpRequest(ctx context.Context, method s
         req = req.WithContext(ctx)
     }
 
-    if in != nil {
+    if body != nil {
         req.Header.Set("Content-Type", contentType)
     }
 
@@ -271,10 +260,10 @@ type StaticServiceClientHandler struct {
     client *Client
 }
 
-func (h *StaticServiceClientHandler) ServeStatic(ctx context.Context) (*SizedReadCloser, error) {
+func (h *StaticServiceClientHandler) ServeStatic(ctx context.Context, filepath string) (*SizedReadCloser, error) {
 
     methodType := "GET"
-    methodPath := "/{filepath:path}"
+    methodPath := fmt.Sprintf("/%s", url.PathEscape(filepath))
     url := h.client.url + "/" + h.path + "/" + methodPath
 
     r, err := h.doHttpRequest(ctx, methodType, url, "",nil)
@@ -287,21 +276,9 @@ func (h *StaticServiceClientHandler) ServeStatic(ctx context.Context) (*SizedRea
 
 
 
-func (h *StaticServiceClientHandler) doHttpRequest(ctx context.Context, method string, url string, contentType string, in interface{}) (*SizedReadCloser, error) {
+func (h *StaticServiceClientHandler) doHttpRequest(ctx context.Context, method string, url string, contentType string, body io.Reader) (*SizedReadCloser, error) {
 
-    var reqBodyBuffer io.Reader = nil
-
-    if in != nil {
-
-        reqBody, err := json.Marshal(in)
-        if err != nil {
-            return nil, rrpc.ErrRrpcBadRequest.WithCausef("failed to marshal json request: %w", err)
-        }
-
-        reqBodyBuffer = bytes.NewBuffer(reqBody)
-    }
-
-    req, err := http.NewRequest(method, url, reqBodyBuffer)
+    req, err := http.NewRequest(method, url, body)
     if err != nil {
        	return nil, rrpc.ErrRrpcBadRequest.WithCausef("failed to create http request: %w", err)
     }
@@ -310,7 +287,7 @@ func (h *StaticServiceClientHandler) doHttpRequest(ctx context.Context, method s
         req = req.WithContext(ctx)
     }
 
-    if in != nil {
+    if body != nil {
         req.Header.Set("Content-Type", contentType)
     }
 
