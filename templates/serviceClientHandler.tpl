@@ -1,5 +1,7 @@
 {{- define "serviceClientHandler" }}
-{{- $service := .}}
+{{- $service := . -}}
+{{- $serviceHasMultipart := false -}}
+{{- range $_, $method := .Methods -}}{{- if eq $method.ContentType "multipart/form-data" -}}{{- $serviceHasMultipart = true -}}{{- end -}}{{- end -}}
 func new{{ firstLetterToUpper .Name }}ServiceClientHandler(client *Client) *{{ firstLetterToUpper .Name }}ServiceClientHandler {
     return &{{ firstLetterToUpper .Name }}ServiceClientHandler{
         client: client,
@@ -15,6 +17,7 @@ type {{ firstLetterToUpper .Name }}ServiceClientHandler struct {
 }
 
 {{ range $_, $method := .Methods -}}
+{{- $isMultipart := eq $method.ContentType "multipart/form-data" -}}
 func (h *{{ firstLetterToUpper $service.Name }}ServiceClientHandler) {{ firstLetterToUpper $method.Name -}}
         (ctx context.Context
         {{- range $_, $input := $method.Inputs -}}
@@ -33,10 +36,13 @@ func (h *{{ firstLetterToUpper $service.Name }}ServiceClientHandler) {{ firstLet
 
     methodType := "{{ $method.Type }}"
     methodPath := "{{ $method.Path }}"
-    methodContentType := "{{ $method.ContentType }}"
     url := h.client.url + "/" + h.path + "/" + methodPath
 
-    {{ if gt (len $method.Outputs) 0 }}r{{ else }}_{{ end }}, err := h.doHttpRequest(ctx, methodType, url, methodContentType,
+    {{ if gt (len $method.Outputs) 0 }}r{{ else }}_{{ end }}, err :=
+    {{- if $isMultipart }} h.doMultipartRequest(ctx, methodType, url,
+        {{- range $i, $input := $method.Inputs }}{{ if $input.IsStruct }} "{{ $input.Name }}", data,{{ end }}{{ if eq $input.Type "bytes" }} "{{ $input.Name }}", r0{{ end }}{{- end -}}
+    )
+    {{- else }} h.doHttpRequest(ctx, methodType, url, "{{ $method.ContentType }}",
         {{- if eq (len $method.Inputs) 1 }}
             {{- if (index $method.Inputs 0).IsStruct -}}
                 data
@@ -47,6 +53,7 @@ func (h *{{ firstLetterToUpper $service.Name }}ServiceClientHandler) {{ firstLet
             nil
         {{- end -}}
     )
+    {{- end }}
     if err != nil {
         return {{ range $_, $_ := $method.Outputs }}nil, {{ end }}err
     }
@@ -139,6 +146,74 @@ func (h *{{ firstLetterToUpper $service.Name }}ServiceClientHandler) doHttpReque
     return ret, nil
 }
 
+{{ if $serviceHasMultipart -}}
+func (h *{{ firstLetterToUpper $service.Name }}ServiceClientHandler) doMultipartRequest(ctx context.Context, method string, url string, structField string, in interface{}, bytesField string, r io.Reader) (*SizedReadCloser, error) {
+
+    var buf bytes.Buffer
+    mw := multipart.NewWriter(&buf)
+
+    jsonData, err := json.Marshal(in)
+    if err != nil {
+        return nil, rrpc.ErrRrpcBadRequest.WithCausef("failed to marshal json part: %w", err)
+    }
+    fw, err := mw.CreateFormField(structField)
+    if err != nil {
+        return nil, rrpc.ErrRrpcBadRequest.WithCausef("failed to create form field: %w", err)
+    }
+    if _, err := fw.Write(jsonData); err != nil {
+        return nil, rrpc.ErrRrpcBadRequest.WithCausef("failed to write form field: %w", err)
+    }
+
+    bw, err := mw.CreateFormFile(bytesField, bytesField)
+    if err != nil {
+        return nil, rrpc.ErrRrpcBadRequest.WithCausef("failed to create form file: %w", err)
+    }
+    if _, err := io.Copy(bw, r); err != nil {
+        return nil, rrpc.ErrRrpcBadRequest.WithCausef("failed to write bytes part: %w", err)
+    }
+    mw.Close()
+
+    req, err := http.NewRequest(method, url, &buf)
+    if err != nil {
+        return nil, rrpc.ErrRrpcBadRequest.WithCausef("failed to create http request: %w", err)
+    }
+    if ctx != nil {
+        req = req.WithContext(ctx)
+    }
+    req.Header.Set("Content-Type", mw.FormDataContentType())
+    req.Header.Set("Accept", "application/json")
+
+    resp, err := h.client.Do(req)
+    if err != nil {
+        return nil, rrpc.ErrRrpcRequestFailed.WithCause(err)
+    }
+
+    if resp.StatusCode != 200 {
+        defer resp.Body.Close()
+        respBody, err := h.readAll(resp.Body)
+        if err != nil {
+            return nil, err
+        }
+        var rpcErr rrpc.RRPCError
+        if err := json.Unmarshal(respBody, &rpcErr); err != nil {
+            return nil, rrpc.ErrRrpcBadResponse.WithCausef("failed to unmarshal server error: %w", err)
+        }
+        return nil, rpcErr.WithCauseString()
+    }
+
+    var ret *SizedReadCloser
+    contentLengthStr := resp.Header.Get("Content-Length")
+    if contentLengthStr != "" {
+        contentLength, err := strconv.ParseInt(contentLengthStr, 10, 64)
+        if err != nil {
+            return nil, rrpc.ErrRrpcBadResponse.WithCausef("failed to parse Content-Length header: %w", err)
+        }
+        ret = NewSizedReadCloser(resp.Body, contentLength)
+    }
+
+    return ret, nil
+}
+{{ end }}
 func (h *{{ firstLetterToUpper $service.Name }}ServiceClientHandler) readAll(r io.Reader) ([]byte, error) {
     b, err := io.ReadAll(r)
     if err != nil {

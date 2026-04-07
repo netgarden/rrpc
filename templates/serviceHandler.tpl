@@ -42,8 +42,29 @@ func (h *{{ firstLetterToUpper $service.Name }}ServiceHandler) Methods() []rrpc.
 
 {{ range $_, $method := .Methods -}}
 func (h *{{ firstLetterToUpper $service.Name }}ServiceHandler) handle{{ firstLetterToUpper $method.Name }}(ctx *rrpc.Context) error {
+    {{- $isMultipart := eq $method.ContentType "multipart/form-data" }}
 
-	{{ if and (eq (len $method.Inputs) 1) ((index $method.Inputs 0).IsStruct) -}}
+	{{ if $isMultipart -}}
+	if err := ctx.Request().ParseMultipartForm(32 << 20); err != nil {
+		return rrpc.ErrRrpcBadRequest.WithCausef("failed to parse multipart form: %w", err)
+	}
+	{{- range $i, $input := $method.Inputs }}
+	{{- if $input.IsStruct }}
+	reqPayload := &{{ $input.Type }}{}
+	if err := json.Unmarshal([]byte(ctx.Request().FormValue("{{ $input.Name }}")), reqPayload); err != nil {
+		return rrpc.ErrRrpcBadRequest.WithCausef("failed to unmarshal {{ $input.Name }} field: %w", err)
+	}
+	{{- end }}
+	{{- if eq $input.Type "bytes" }}
+	{{ $input.Name }}File, _, err := ctx.Request().FormFile("{{ $input.Name }}")
+	if err != nil {
+		return rrpc.ErrRrpcBadRequest.WithCausef("failed to read {{ $input.Name }} field: %w", err)
+	}
+	defer {{ $input.Name }}File.Close()
+	{{- end }}
+	{{- end }}
+
+	{{ else if and (eq (len $method.Inputs) 1) ((index $method.Inputs 0).IsStruct) -}}
 	reqPayload := &{{ (index $method.Inputs 0).Type }}{}
 	{{ if eq $method.Type "GET" -}}
 	if err := rrpc.DecodeQueryParams(ctx.Request().URL.Query(), reqPayload); err != nil {
@@ -66,7 +87,7 @@ func (h *{{ firstLetterToUpper $service.Name }}ServiceHandler) handle{{ firstLet
     {{ end -}}
 
 	// Call service method implementation.
-    {{if and (eq (len $method.Outputs) 1) ((index $method.Outputs 0).IsStruct)}}ret0, {{end}}err1 := h.service.{{firstLetterToUpper $method.Name}}(ctx{{range $i, $input := $method.Inputs}}, {{if $input.IsStruct}}reqPayload{{else if eq $input.Type "bytes"}}ctx.Request().Body{{end}}{{end}}{{if eq (len $method.Outputs) 1}}{{if eq (index $method.Outputs 0).Type "bytes"}}, w1{{end}}{{end}})
+    {{if and (eq (len $method.Outputs) 1) ((index $method.Outputs 0).IsStruct)}}ret0, {{end}}err1 := h.service.{{firstLetterToUpper $method.Name}}(ctx{{range $i, $input := $method.Inputs}}, {{if $input.IsStruct}}reqPayload{{else if eq $input.Type "bytes"}}{{if $isMultipart}}{{ $input.Name }}File{{else}}ctx.Request().Body{{end}}{{end}}{{end}}{{if eq (len $method.Outputs) 1}}{{if eq (index $method.Outputs 0).Type "bytes"}}, w1{{end}}{{end}})
     if err1 != nil {
     	rpcErr, ok := err1.(rrpc.RRPCError)
     	if !ok {
