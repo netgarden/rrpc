@@ -1,4 +1,4 @@
-import { RRPCClient, RRPCResponse, type RRPCError } from "$lib/rrpc";
+import { RRPCClient, RRPCResponse } from "$lib/rrpc";
 
 {{ template "client" . }}
 
@@ -6,6 +6,6 @@ import { RRPCClient, RRPCResponse, type RRPCError } from "$lib/rrpc";
 {{ template "serviceHandler" $service }}
 {{ end }}
 
-{{ range $_, $struct := .Structs }}
+{{- range $_, $struct := .Structs }}
 {{ template "struct" $struct }}
 {{ end }}

@@ -25,6 +25,8 @@ class {{ firstLetterToUpper .Name }}ServiceHandler {
         {{- $singleBytes = true -}}
       {{- end }}
 
+      {{- $isMultipart := eq $method.ContentType "multipart/form-data" -}}
+
       {{- $pathParams := methodPathParams $method.Path }}
 
     async {{ firstLetterToLower $method.Name }}(
@@ -47,12 +49,25 @@ class {{ firstLetterToUpper .Name }}ServiceHandler {
         const uri = ('/' + this._path + '/' + methodPath).replace(/\/+/g, '/');
 
         let reqUri : string = uri;
-        let reqBody : string | Uint8Array | null = null;
+        let reqBody : string | Uint8Array | FormData | null = null;
 
-        {{- if $getWithStruct }}
+        {{- if $isMultipart }}
+
+        const formData = new FormData();
+        {{- range $i, $input := $method.Inputs }}
+        {{- if $input.IsStruct }}
+        formData.append('{{ $input.Name }}', JSON.stringify({{ firstLetterToLower $input.Name }}));
+        {{- end }}
+        {{- if eq $input.Type "bytes" }}
+        formData.append('{{ $input.Name }}', new Blob([{{ firstLetterToLower $input.Name }} as unknown as BlobPart]));
+        {{- end }}
+        {{- end }}
+        reqBody = formData;
+
+        {{- else if $getWithStruct }}
 
         const queryParams = new URLSearchParams();
-        for (const [key, value] of Object.entries({{ firstLetterToLower (index $method.Inputs 0).Name }} as Record<string, unknown>)) {
+        for (const [key, value] of Object.entries({{ firstLetterToLower (index $method.Inputs 0).Name }} as unknown as Record<string, unknown>)) {
             if (value === null || value === undefined) continue;
             if (value instanceof Uint8Array) {
                 queryParams.set(key, btoa(String.fromCharCode(...value)));
@@ -81,9 +96,6 @@ class {{ firstLetterToUpper .Name }}ServiceHandler {
         {{- end }}
 
         const res : RRPCResponse = await this._client.sendRequest(method, reqUri, reqBody);
-        if (res.error != null) {
-            this.handleError(res.error);
-        }
 
         {{ range $i, $output := $method.Outputs -}}
         {{ if $output.IsStruct -}}
