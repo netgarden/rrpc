@@ -1,4 +1,4 @@
-import { RRPCClient, RRPCResponse, type RRPCError } from "$lib/rrpc";
+import { RRPCClient, RRPCResponse } from "$lib/rrpc";
 
 export class EchoClient {
 
@@ -35,10 +35,10 @@ class EchoServiceHandler {
         const uri = ('/' + this._path + '/' + methodPath).replace(/\/+/g, '/');
 
         let reqUri : string = uri;
-        let reqBody : string | Uint8Array | null = null;
+        let reqBody : string | Uint8Array | FormData | null = null;
 
         const queryParams = new URLSearchParams();
-        for (const [key, value] of Object.entries(request as Record<string, unknown>)) {
+        for (const [key, value] of Object.entries(request as unknown as Record<string, unknown>)) {
             if (value === null || value === undefined) continue;
             if (value instanceof Uint8Array) {
                 queryParams.set(key, btoa(String.fromCharCode(...value)));
@@ -49,9 +49,6 @@ class EchoServiceHandler {
         reqUri = uri + '?' + queryParams.toString();
 
         const res : RRPCResponse = await this._client.sendRequest(method, reqUri, reqBody);
-        if (res.error != null) {
-            this.handleError(res.error);
-        }
 
         const ret : EchoResponse = await res.response.json();
 
@@ -60,14 +57,12 @@ class EchoServiceHandler {
 
 }
 
-
-
 class EchoRequest {
-    message: string;
-    count: number;
-    flag: boolean;
+    message!: string;
+    count!: number;
+    flag!: boolean;
 }
 
 class EchoResponse {
-    result: string;
+    result!: string;
 }

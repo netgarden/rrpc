@@ -94,7 +94,6 @@ func (h *EchoServiceHandler) readBody(r *http.Request) ([]byte, error) {
 
     return reqBody, nil
 }
-
 func newEchoServiceClientHandler(client *Client) *EchoServiceClientHandler {
     return &EchoServiceClientHandler{
         client: client,
@@ -113,10 +112,9 @@ func (h *EchoServiceClientHandler) Echo(ctx context.Context, data *EchoRequest) 
 
     methodType := "GET"
     methodPath := "Echo"
-    methodContentType := "application/json"
     url := h.client.url + "/" + h.path + "/" + methodPath
 
-    r, err := h.doHttpRequest(ctx, methodType, url, methodContentType,data)
+    r, err := h.doHttpRequest(ctx, methodType, url, "application/json",data)
     if err != nil {
         return nil, err
     }
@@ -205,6 +203,7 @@ func (h *EchoServiceClientHandler) doHttpRequest(ctx context.Context, method str
 
     return ret, nil
 }
+
 
 func (h *EchoServiceClientHandler) readAll(r io.Reader) ([]byte, error) {
     b, err := io.ReadAll(r)

@@ -85,6 +85,8 @@ func (s *Server) Start() error {
 		Handler: http.HandlerFunc(s.rrpcServer.ServeHTTP),
 	}
 
+	log.Println("Starting http server on", s.httpServer.Addr)
+
 	go func() {
 		if err := s.httpServer.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
 			log.Fatal(err)

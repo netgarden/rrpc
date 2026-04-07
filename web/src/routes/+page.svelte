@@ -31,6 +31,11 @@
     let uploadResult = $state<string | null>(null);
     let uploadError = $state<string | null>(null);
 
+    let upload2File = $state<File | null>(null);
+    let upload2Filename = $state('');
+    let upload2Result = $state<string | null>(null);
+    let upload2Error = $state<string | null>(null);
+
     let downloadFilename = $state('');
     let downloadResult = $state<string | null>(null);
     let downloadError = $state<string | null>(null);
@@ -98,6 +103,20 @@
         }
     }
 
+    async function upload2() {
+        upload2Result = null;
+        upload2Error = null;
+        if (!upload2File) return;
+        try {
+            const arrayBuffer = await upload2File.arrayBuffer();
+            const filename = upload2Filename.trim() || upload2File.name;
+            await filesClient.filesService.upload2({ filename }, new Uint8Array(arrayBuffer));
+            upload2Result = `Uploaded "${filename}"`;
+        } catch (e) {
+            upload2Error = errMsg(e);
+        }
+    }
+
     async function download() {
         downloadResult = null;
         downloadError = null;
@@ -155,6 +174,17 @@
         </div>
         {#if echoResult}<p class="result">{echoResult}</p>{/if}
         {#if echoError}<p class="error">{echoError}</p>{/if}
+    </section>
+
+    <section>
+        <h2>Files — Upload2 (multipart)</h2>
+        <div class="form">
+            <input type="file" onchange={(e) => upload2File = e.currentTarget.files?.[0] ?? null} />
+            <input type="text" bind:value={upload2Filename} placeholder="Filename (optional, defaults to file name)" />
+            <button onclick={upload2} disabled={!upload2File}>Upload</button>
+        </div>
+        {#if upload2Result}<p class="result">{upload2Result}</p>{/if}
+        {#if upload2Error}<p class="error">{upload2Error}</p>{/if}
     </section>
 
     <section>

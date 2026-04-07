@@ -1,4 +1,4 @@
-import { RRPCClient, RRPCResponse, type RRPCError } from "$lib/rrpc";
+import { RRPCClient, RRPCResponse } from "$lib/rrpc";
 
 export class AuthClient {
 
@@ -35,14 +35,11 @@ class AuthServiceHandler {
         const uri = ('/' + this._path + '/' + methodPath).replace(/\/+/g, '/');
 
         let reqUri : string = uri;
-        let reqBody : string | Uint8Array | null = null;
+        let reqBody : string | Uint8Array | FormData | null = null;
 
         reqBody = JSON.stringify(request);
 
         const res : RRPCResponse = await this._client.sendRequest(method, reqUri, reqBody);
-        if (res.error != null) {
-            this.handleError(res.error);
-        }
 
         const ret : LoginResponse = await res.response.json();
 
@@ -56,25 +53,20 @@ class AuthServiceHandler {
         const uri = ('/' + this._path + '/' + methodPath).replace(/\/+/g, '/');
 
         let reqUri : string = uri;
-        let reqBody : string | Uint8Array | null = null;
+        let reqBody : string | Uint8Array | FormData | null = null;
 
         const res : RRPCResponse = await this._client.sendRequest(method, reqUri, reqBody);
-        if (res.error != null) {
-            this.handleError(res.error);
-        }
 
         return;
     }
 
 }
 
-
-
 class LoginRequest {
-    username: string;
-    password: string;
+    username!: string;
+    password!: string;
 }
 
 class LoginResponse {
-    ok: boolean;
+    ok!: boolean;
 }

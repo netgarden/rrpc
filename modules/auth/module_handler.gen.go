@@ -123,7 +123,6 @@ func (h *AuthServiceHandler) readBody(r *http.Request) ([]byte, error) {
 
     return reqBody, nil
 }
-
 func newAuthServiceClientHandler(client *Client) *AuthServiceClientHandler {
     return &AuthServiceClientHandler{
         client: client,
@@ -142,10 +141,9 @@ func (h *AuthServiceClientHandler) Login(ctx context.Context, data *LoginRequest
 
     methodType := "POST"
     methodPath := "login"
-    methodContentType := "application/json"
     url := h.client.url + "/" + h.path + "/" + methodPath
 
-    r, err := h.doHttpRequest(ctx, methodType, url, methodContentType,data)
+    r, err := h.doHttpRequest(ctx, methodType, url, "application/json",data)
     if err != nil {
         return nil, err
     }
@@ -171,10 +169,9 @@ func (h *AuthServiceClientHandler) Logout(ctx context.Context)error {
 
     methodType := "POST"
     methodPath := "logout"
-    methodContentType := ""
     url := h.client.url + "/" + h.path + "/" + methodPath
 
-    _, err := h.doHttpRequest(ctx, methodType, url, methodContentType,nil)
+    _, err := h.doHttpRequest(ctx, methodType, url, "",nil)
     if err != nil {
         return err
     }
@@ -249,6 +246,7 @@ func (h *AuthServiceClientHandler) doHttpRequest(ctx context.Context, method str
 
     return ret, nil
 }
+
 
 func (h *AuthServiceClientHandler) readAll(r io.Reader) ([]byte, error) {
     b, err := io.ReadAll(r)

@@ -1,4 +1,4 @@
-import { RRPCClient, RRPCResponse, type RRPCError } from "$lib/rrpc";
+import { RRPCClient, RRPCResponse } from "$lib/rrpc";
 
 export class TestClient {
 
@@ -37,12 +37,9 @@ class PingerServiceHandler {
         const uri = ('/' + this._path + '/' + methodPath).replace(/\/+/g, '/');
 
         let reqUri : string = uri;
-        let reqBody : string | Uint8Array | null = null;
+        let reqBody : string | Uint8Array | FormData | null = null;
 
         const res : RRPCResponse = await this._client.sendRequest(method, reqUri, reqBody);
-        if (res.error != null) {
-            this.handleError(res.error);
-        }
 
         return;
     }
@@ -67,12 +64,9 @@ class StaticServiceHandler {
         const uri = ('/' + this._path + '/' + methodPath).replace(/\/+/g, '/');
 
         let reqUri : string = uri;
-        let reqBody : string | Uint8Array | null = null;
+        let reqBody : string | Uint8Array | FormData | null = null;
 
         const res : RRPCResponse = await this._client.sendRequest(method, reqUri, reqBody);
-        if (res.error != null) {
-            this.handleError(res.error);
-        }
 
         const ret : Uint8Array = new Uint8Array(await res.response.arrayBuffer());
 
@@ -80,5 +74,3 @@ class StaticServiceHandler {
     }
 
 }
-
-

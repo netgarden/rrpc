@@ -28,16 +28,22 @@ export class RRPCClient {
         this._url = url;
     }
 
-    async sendRequest(method: string, uri: string, data: string | Uint8Array | null): Promise<RRPCResponse> {
+    async sendRequest(method: string, uri: string, data: string | Uint8Array | FormData | null): Promise<RRPCResponse> {
 
         const headers : Record<string, string> = {
             'Accept': 'application/json',
         }
 
-        if (data instanceof Uint8Array) {
+        let body : BodyInit | null = null;
+        if (data instanceof FormData) {
+            // do not set Content-Type; browser sets it with the correct boundary
+            body = data;
+        } else if (data !== null && typeof data !== 'string') {
             headers['Content-Type'] = 'application/octet-stream';
+            body = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
         } else if (data != null && data !== "") {
             headers['Content-Type'] = 'application/json';
+            body = data;
         }
 
         const base : string = this._url.endsWith('/') ? this._url.slice(0, -1) : this._url;
@@ -47,7 +53,7 @@ export class RRPCClient {
             {
                 headers: headers,
                 method: method,
-                body: data,
+                body: body,
             }
         );
 

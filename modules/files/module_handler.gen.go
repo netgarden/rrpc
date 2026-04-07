@@ -5,6 +5,7 @@ import (
     "context"
     "encoding/json"
     "io"
+    "mime/multipart"
     "net/http"
     "strconv"
 
@@ -19,9 +20,15 @@ func newFilesServiceHandler(service FilesService) *FilesServiceHandler {
     serviceHandler.methods = []rrpc.MethodHolder{
         {
             Path:        rrpc.ParsePath("/upload/{filename:string}"),
-            Type:        "POST",
+            Type:        "PUT",
             ContentType: "application/octet-stream",
             HandlerFunc: serviceHandler.handleUpload,
+        },
+        {
+            Path:        rrpc.ParsePath("/upload2"),
+            Type:        "POST",
+            ContentType: "multipart/form-data",
+            HandlerFunc: serviceHandler.handleUpload2,
         },
         {
             Path:        rrpc.ParsePath("/download/{filename:string}"),
@@ -74,6 +81,38 @@ func (h *FilesServiceHandler) handleUpload(ctx *rrpc.Context) error {
 	return nil
 }
 
+func (h *FilesServiceHandler) handleUpload2(ctx *rrpc.Context) error {
+
+	if err := ctx.Request().ParseMultipartForm(32 << 20); err != nil {
+		return rrpc.ErrRrpcBadRequest.WithCausef("failed to parse multipart form: %w", err)
+	}
+	reqPayload := &UploadDataInfo{}
+	if err := json.Unmarshal([]byte(ctx.Request().FormValue("info")), reqPayload); err != nil {
+		return rrpc.ErrRrpcBadRequest.WithCausef("failed to unmarshal info field: %w", err)
+	}
+	dataFile, _, err := ctx.Request().FormFile("data")
+	if err != nil {
+		return rrpc.ErrRrpcBadRequest.WithCausef("failed to read data field: %w", err)
+	}
+	defer dataFile.Close()
+
+	// Call service method implementation.
+    err1 := h.service.Upload2(ctx, reqPayload, dataFile)
+    if err1 != nil {
+    	rpcErr, ok := err1.(rrpc.RRPCError)
+    	if !ok {
+    		rpcErr = rrpc.ErrRrpcEndpoint.WithCause(err1)
+    	}
+    	return rpcErr
+    }
+
+	// ctx.Response().WriteHeader(http.StatusOK)
+
+    
+
+	return nil
+}
+
 func (h *FilesServiceHandler) handleDownload(ctx *rrpc.Context) error {
 
 	w1 := rrpc.NewResponseWriter(ctx.Response(), "application/octet-stream")
@@ -109,7 +148,6 @@ func (h *FilesServiceHandler) readBody(r *http.Request) ([]byte, error) {
 
     return reqBody, nil
 }
-
 func newFilesServiceClientHandler(client *Client) *FilesServiceClientHandler {
     return &FilesServiceClientHandler{
         client: client,
@@ -126,12 +164,25 @@ type FilesServiceClientHandler struct {
 
 func (h *FilesServiceClientHandler) Upload(ctx context.Context, r0 *SizedReader)error {
 
-    methodType := "POST"
+    methodType := "PUT"
     methodPath := "/upload/{filename:string}"
-    methodContentType := "application/octet-stream"
     url := h.client.url + "/" + h.path + "/" + methodPath
 
-    _, err := h.doHttpRequest(ctx, methodType, url, methodContentType,r0)
+    _, err := h.doHttpRequest(ctx, methodType, url, "application/octet-stream",r0)
+    if err != nil {
+        return err
+    }
+
+    return nil
+}
+
+func (h *FilesServiceClientHandler) Upload2(ctx context.Context, data *UploadDataInfo, r0 *SizedReader)error {
+
+    methodType := "POST"
+    methodPath := "/upload2"
+    url := h.client.url + "/" + h.path + "/" + methodPath
+
+    _, err := h.doMultipartRequest(ctx, methodType, url, "info", data, "data", r0)
     if err != nil {
         return err
     }
@@ -143,10 +194,9 @@ func (h *FilesServiceClientHandler) Download(ctx context.Context) (*SizedReadClo
 
     methodType := "GET"
     methodPath := "/download/{filename:string}"
-    methodContentType := ""
     url := h.client.url + "/" + h.path + "/" + methodPath
 
-    r, err := h.doHttpRequest(ctx, methodType, url, methodContentType,nil)
+    r, err := h.doHttpRequest(ctx, methodType, url, "",nil)
     if err != nil {
         return nil, err
     }
@@ -216,6 +266,73 @@ func (h *FilesServiceClientHandler) doHttpRequest(ctx context.Context, method st
             return nil, rrpc.ErrRrpcBadResponse.WithCausef("failed to parse Content-Length header: %w", err)
         }
 
+        ret = NewSizedReadCloser(resp.Body, contentLength)
+    }
+
+    return ret, nil
+}
+
+func (h *FilesServiceClientHandler) doMultipartRequest(ctx context.Context, method string, url string, structField string, in interface{}, bytesField string, r io.Reader) (*SizedReadCloser, error) {
+
+    var buf bytes.Buffer
+    mw := multipart.NewWriter(&buf)
+
+    jsonData, err := json.Marshal(in)
+    if err != nil {
+        return nil, rrpc.ErrRrpcBadRequest.WithCausef("failed to marshal json part: %w", err)
+    }
+    fw, err := mw.CreateFormField(structField)
+    if err != nil {
+        return nil, rrpc.ErrRrpcBadRequest.WithCausef("failed to create form field: %w", err)
+    }
+    if _, err := fw.Write(jsonData); err != nil {
+        return nil, rrpc.ErrRrpcBadRequest.WithCausef("failed to write form field: %w", err)
+    }
+
+    bw, err := mw.CreateFormFile(bytesField, bytesField)
+    if err != nil {
+        return nil, rrpc.ErrRrpcBadRequest.WithCausef("failed to create form file: %w", err)
+    }
+    if _, err := io.Copy(bw, r); err != nil {
+        return nil, rrpc.ErrRrpcBadRequest.WithCausef("failed to write bytes part: %w", err)
+    }
+    mw.Close()
+
+    req, err := http.NewRequest(method, url, &buf)
+    if err != nil {
+        return nil, rrpc.ErrRrpcBadRequest.WithCausef("failed to create http request: %w", err)
+    }
+    if ctx != nil {
+        req = req.WithContext(ctx)
+    }
+    req.Header.Set("Content-Type", mw.FormDataContentType())
+    req.Header.Set("Accept", "application/json")
+
+    resp, err := h.client.Do(req)
+    if err != nil {
+        return nil, rrpc.ErrRrpcRequestFailed.WithCause(err)
+    }
+
+    if resp.StatusCode != 200 {
+        defer resp.Body.Close()
+        respBody, err := h.readAll(resp.Body)
+        if err != nil {
+            return nil, err
+        }
+        var rpcErr rrpc.RRPCError
+        if err := json.Unmarshal(respBody, &rpcErr); err != nil {
+            return nil, rrpc.ErrRrpcBadResponse.WithCausef("failed to unmarshal server error: %w", err)
+        }
+        return nil, rpcErr.WithCauseString()
+    }
+
+    var ret *SizedReadCloser
+    contentLengthStr := resp.Header.Get("Content-Length")
+    if contentLengthStr != "" {
+        contentLength, err := strconv.ParseInt(contentLengthStr, 10, 64)
+        if err != nil {
+            return nil, rrpc.ErrRrpcBadResponse.WithCausef("failed to parse Content-Length header: %w", err)
+        }
         ret = NewSizedReadCloser(resp.Body, contentLength)
     }
 

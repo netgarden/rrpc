@@ -35,6 +35,19 @@ func (s *FilesService) Upload(ctx *rrpc.Context, r io.Reader) error {
 	return err
 }
 
+func (s *FilesService) Upload2(ctx *rrpc.Context, info *files.UploadDataInfo, r io.Reader) error {
+	filePath := filepath.Join(s.dir, filepath.Base(info.Filename))
+
+	f, err := os.Create(filePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	_, err = io.Copy(f, r)
+	return err
+}
+
 func (s *FilesService) Download(ctx *rrpc.Context, w io.Writer) error {
 	filename := ctx.Params().GetString("filename")
 	filePath := filepath.Join(s.dir, filepath.Base(filename))

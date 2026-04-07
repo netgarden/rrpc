@@ -80,7 +80,6 @@ func (h *PingerServiceHandler) readBody(r *http.Request) ([]byte, error) {
 
     return reqBody, nil
 }
-
 func newPingerServiceClientHandler(client *Client) *PingerServiceClientHandler {
     return &PingerServiceClientHandler{
         client: client,
@@ -99,10 +98,9 @@ func (h *PingerServiceClientHandler) Ping(ctx context.Context)error {
 
     methodType := "GET"
     methodPath := "Ping"
-    methodContentType := ""
     url := h.client.url + "/" + h.path + "/" + methodPath
 
-    _, err := h.doHttpRequest(ctx, methodType, url, methodContentType,nil)
+    _, err := h.doHttpRequest(ctx, methodType, url, "",nil)
     if err != nil {
         return err
     }
@@ -177,6 +175,7 @@ func (h *PingerServiceClientHandler) doHttpRequest(ctx context.Context, method s
 
     return ret, nil
 }
+
 
 func (h *PingerServiceClientHandler) readAll(r io.Reader) ([]byte, error) {
     b, err := io.ReadAll(r)
@@ -258,7 +257,6 @@ func (h *StaticServiceHandler) readBody(r *http.Request) ([]byte, error) {
 
     return reqBody, nil
 }
-
 func newStaticServiceClientHandler(client *Client) *StaticServiceClientHandler {
     return &StaticServiceClientHandler{
         client: client,
@@ -277,10 +275,9 @@ func (h *StaticServiceClientHandler) ServeStatic(ctx context.Context) (*SizedRea
 
     methodType := "GET"
     methodPath := "/{filepath:path}"
-    methodContentType := ""
     url := h.client.url + "/" + h.path + "/" + methodPath
 
-    r, err := h.doHttpRequest(ctx, methodType, url, methodContentType,nil)
+    r, err := h.doHttpRequest(ctx, methodType, url, "",nil)
     if err != nil {
         return nil, err
     }
@@ -355,6 +352,7 @@ func (h *StaticServiceClientHandler) doHttpRequest(ctx context.Context, method s
 
     return ret, nil
 }
+
 
 func (h *StaticServiceClientHandler) readAll(r io.Reader) ([]byte, error) {
     b, err := io.ReadAll(r)
