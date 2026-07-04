@@ -30,7 +30,9 @@ func rrpcDataTypeToTSType(dataType string) string {
 		return "Uint8Array"
 	}
 
-	panic("unsupported rrpc type: " + dataType)
+	// Not a primitive: the parser has already validated this as a declared
+	// struct name, so treat it as a reference to the generated TS class.
+	return dataType
 }
 
 func rrpcDataTypeToTSInputType(dataType string) string {

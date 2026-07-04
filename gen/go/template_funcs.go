@@ -3,7 +3,7 @@ package rrpc_gen_go
 import (
 	"strings"
 
-	def "github.com/netgarden/rrpc-def"
+	def "github.com/netgarden/rrpc/def"
 )
 
 // methodPathParams extracts path parameter names from a path string.
@@ -30,13 +30,16 @@ func methodPathParams(path string) []string {
 	return params
 }
 
-// methodPathToGo converts a path string to a Go expression producing the path.
+// methodPathToGo converts a path string to a Go expression producing the
+// path. "string"-typed params (the default when no type is given) are
+// escaped as a single path segment via url.PathEscape; "path"-typed params
+// may themselves contain "/" and are escaped per-segment via
+// rrpc.EscapePathValue so the separators survive.
 // E.g. "/upload/{filename:string}" -> `fmt.Sprintf("/upload/%s", url.PathEscape(filename))`
 func methodPathToGo(path string) string {
-	var segments []string
 	var args []string
-	rest := path
 	literal := ""
+	rest := path
 	for {
 		start := strings.Index(rest, "{")
 		if start == -1 {
@@ -50,19 +53,58 @@ func methodPathToGo(path string) string {
 			break
 		}
 		param := rest[start+1 : start+end]
+		paramType := "string"
 		if colonIdx := strings.Index(param, ":"); colonIdx != -1 {
+			paramType = param[colonIdx+1:]
 			param = param[:colonIdx]
 		}
 		literal += "%s"
-		args = append(args, "url.PathEscape("+param+")")
+		args = append(args, pathParamEscapeExprGo(paramType, param))
 		rest = rest[start+end+1:]
 	}
 	if len(args) == 0 {
 		return `"` + literal + `"`
 	}
-	segments = append(segments, `"`+literal+`"`)
-	_ = segments
 	return `fmt.Sprintf("` + literal + `", ` + strings.Join(args, ", ") + `)`
+}
+
+// pathParamEscapeExprGo returns the Go expression that escapes a path
+// parameter's value for inclusion in a URL, per its declared type.
+func pathParamEscapeExprGo(paramType, param string) string {
+	switch paramType {
+	case "string":
+		return "url.PathEscape(" + param + ")"
+	case "path":
+		return "rrpc.EscapePathValue(" + param + ")"
+	default:
+		panic("unknown path parameter type \"" + paramType + "\" for parameter \"" + param + "\" (expected \"string\" or \"path\")")
+	}
+}
+
+// methodPathHasStringParam reports whether path declares at least one
+// "string"-typed (the default) path parameter — used to decide whether the
+// generated file needs to import "net/url" for url.PathEscape.
+func methodPathHasStringParam(path string) bool {
+	rest := path
+	for {
+		start := strings.Index(rest, "{")
+		if start == -1 {
+			return false
+		}
+		end := strings.Index(rest[start:], "}")
+		if end == -1 {
+			return false
+		}
+		param := rest[start+1 : start+end]
+		paramType := "string"
+		if colonIdx := strings.Index(param, ":"); colonIdx != -1 {
+			paramType = param[colonIdx+1:]
+		}
+		if paramType == "string" {
+			return true
+		}
+		rest = rest[start+end+1:]
+	}
 }
 
 func createFieldDefaultValue(field def.Field) string {

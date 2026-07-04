@@ -1,3 +1,12 @@
+// escapePathValue encodes value for safe inclusion in a URL path built from
+// a "path"-typed parameter, which — unlike a "string"-typed one — may
+// itself contain "/" separators that must be preserved rather than
+// escaped away. Each segment between slashes is percent-encoded
+// individually; the separators themselves are not.
+export function escapePathValue(value: string): string {
+    return value.split('/').map(encodeURIComponent).join('/');
+}
+
 export class RRPCError {
 
     public error: string;
@@ -23,15 +32,26 @@ interface ErrorData {
 
 export class RRPCClient {
     _url: string;
+    _accessToken: string | null = null;
 
     constructor(url: string) {
         this._url = url;
+    }
+
+    // setAccessToken attaches an "Authorization: Bearer <token>" header to
+    // every subsequent request. Pass null to stop sending it (e.g. on logout).
+    setAccessToken(token: string | null): void {
+        this._accessToken = token;
     }
 
     async sendRequest(method: string, uri: string, data: string | Uint8Array | FormData | null): Promise<RRPCResponse> {
 
         const headers : Record<string, string> = {
             'Accept': 'application/json',
+        }
+
+        if (this._accessToken) {
+            headers['Authorization'] = 'Bearer ' + this._accessToken;
         }
 
         let body : BodyInit | null = null;

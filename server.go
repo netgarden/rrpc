@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"regexp"
 	"slices"
+	"sort"
 	"strings"
 )
 
@@ -16,6 +16,8 @@ const MethodNameCtxKey = "rrpc-method"
 var DataMethods = []string{"POST", "PUT"}
 
 type MethodHandlerFunc = func(ctx *Context) error
+
+type Middleware func(ctx *Context, next func(*Context) error) error
 
 type ServiceHandler interface {
 	Name() string
@@ -32,7 +34,9 @@ type MethodHolder struct {
 
 func NewServer() *Server {
 	return &Server{
-		modules: make([]ServerModule, 0),
+		modules:     make([]ServerModule, 0),
+		routes:      make([]route, 0),
+		middlewares: make([]Middleware, 0),
 	}
 }
 
@@ -42,9 +46,20 @@ type ServerModule interface {
 }
 
 type Server struct {
-	modules   []ServerModule
-	onRequest func(w http.ResponseWriter, r *http.Request) error
-	onError   func(r *http.Request, err *RRPCError)
+	modules []ServerModule
+	// routes is every (service, method) pair across all registered
+	// modules, flattened and kept sorted by specificity (see route.go) so
+	// routing never depends on ServerModule.Services()' map iteration
+	// order — e.g. a catch-all service registered anywhere can never
+	// nondeterministically shadow a more specific one.
+	routes      []route
+	middlewares []Middleware
+	onRequest   func(w http.ResponseWriter, r *http.Request) error
+	onError     func(r *http.Request, err *RRPCError)
+}
+
+func (s *Server) Use(middlewares ...Middleware) {
+	s.middlewares = append(s.middlewares, middlewares...)
 }
 
 func (s *Server) SetOnRequest(fn func(w http.ResponseWriter, r *http.Request) error) {
@@ -61,14 +76,30 @@ func (s *Server) RegisterModule(module ServerModule) error {
 
 	s.modules = append(s.modules, module)
 
+	for _, serviceHandler := range module.Services() {
+		for _, method := range serviceHandler.Methods() {
+			r, err := newRoute(serviceHandler, method)
+			if err != nil {
+				return err
+			}
+			s.routes = append(s.routes, r)
+		}
+	}
+
+	sort.SliceStable(s.routes, func(i, j int) bool {
+		return s.routes[i].specificity.less(s.routes[j].specificity)
+	})
+
 	return nil
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer s.recoverPanic(w, r)
+	s.coreHandle(w, r)
+}
 
+func (s *Server) coreHandle(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	r = r.WithContext(ctx)
 
 	if s.onRequest != nil {
 		if err := s.onRequest(w, r); err != nil {
@@ -90,7 +121,6 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		s.sendErrorJSON(w, r, rpcErr)
 	}
-
 }
 
 func (s *Server) handle(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
@@ -98,100 +128,78 @@ func (s *Server) handle(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	requestMethod := r.Method
 	requestUri := r.URL.Path
 
-	var methodHandler MethodHandlerFunc
-	var params = NewParams()
+	var matched *route
 
-	found := false
+	// s.routes is kept sorted by specificity (see route.go), so the first
+	// match here is always the most specific one, deterministically.
+	for i := range s.routes {
 
-	for _, module := range s.modules {
+		candidate := &s.routes[i]
 
-		for _, serviceHandler := range module.Services() {
-
-			serviceUri := serviceHandler.Path().Regex
-			if !strings.HasPrefix(serviceUri, "/") {
-				serviceUri = "/" + serviceUri
-			}
-			if !strings.HasPrefix(requestUri, serviceUri) {
-				continue
-			}
-
-			for _, method := range serviceHandler.Methods() {
-
-				if requestMethod != method.Type {
-					continue
-				}
-
-				methodUri := serviceUri
-				if !strings.HasSuffix(methodUri, "/") && !strings.HasPrefix(method.Path.Regex, "/") {
-					methodUri += "/"
-				}
-				methodUri += method.Path.Regex
-
-				pattern, err := regexp.Compile(methodUri)
-				if err != nil {
-					return err
-				}
-
-				if !pattern.MatchString(requestUri) {
-					continue
-				}
-
-				submatch := pattern.FindStringSubmatch(requestUri)
-				for i, paramName := range pattern.SubexpNames() {
-					if i != 0 && paramName != "" {
-
-						var param PathParam
-						if paramFound, ok := serviceHandler.Path().Params[paramName]; ok {
-							param = paramFound
-						} else if paramFound, ok := method.Path.Params[paramName]; ok {
-							param = paramFound
-						}
-
-						paramStrValue := submatch[i]
-						err = processParam(params, param, paramStrValue)
-						if err != nil {
-							return err
-						}
-					}
-				}
-
-				if slices.Contains(DataMethods, r.Method) {
-					contentType := r.Header.Get(ContentTypeHeader)
-					if i := strings.Index(contentType, ";"); i >= 0 {
-						contentType = contentType[:i]
-					}
-					contentType = strings.TrimSpace(strings.ToLower(contentType))
-
-					if contentType != method.ContentType {
-						err := ErrRrpcBadRequest.WithCausef("unsupported Content-Type %q (only %s is allowed)", r.Header.Get(ContentTypeHeader), method.ContentType)
-						s.sendErrorJSON(w, r, err)
-					}
-				}
-
-				methodHandler = method.HandlerFunc
-				found = true
-				break
-			}
-
-			if found {
-				break
-			}
-
+		if candidate.method.Type != requestMethod {
+			continue
 		}
 
-		if found {
-			break
+		if !candidate.pattern.MatchString(requestUri) {
+			continue
 		}
 
+		matched = candidate
+		break
 	}
 
-	if !found {
+	if matched == nil {
 		return ErrRrpcBadRoute.WithCausef("no rrpc method defined for path %v", r.URL.Path)
 	}
 
+	params := NewParams()
+
+	submatch := matched.pattern.FindStringSubmatch(requestUri)
+	for i, paramName := range matched.pattern.SubexpNames() {
+		if i != 0 && paramName != "" {
+
+			var param PathParam
+			if paramFound, ok := matched.serviceHandler.Path().Params[paramName]; ok {
+				param = paramFound
+			} else if paramFound, ok := matched.method.Path.Params[paramName]; ok {
+				param = paramFound
+			}
+
+			paramStrValue := submatch[i]
+			if err := processParam(params, param, paramStrValue); err != nil {
+				return err
+			}
+		}
+	}
+
+	if slices.Contains(DataMethods, r.Method) {
+		contentType := r.Header.Get(ContentTypeHeader)
+		if i := strings.Index(contentType, ";"); i >= 0 {
+			contentType = contentType[:i]
+		}
+		contentType = strings.TrimSpace(strings.ToLower(contentType))
+
+		if contentType != matched.method.ContentType {
+			err := ErrRrpcBadRequest.WithCausef("unsupported Content-Type %q (only %s is allowed)", r.Header.Get(ContentTypeHeader), matched.method.ContentType)
+			s.sendErrorJSON(w, r, err)
+		}
+	}
+
+	methodHandler := matched.method.HandlerFunc
 	rrpcCtx := s.createContext(ctx, w, r, params)
 
-	return methodHandler(rrpcCtx)
+	handler := func(c *Context) error {
+		return methodHandler(c)
+	}
+	for i := len(s.middlewares) - 1; i >= 0; i-- {
+		next := handler
+		mw := s.middlewares[i]
+		handler = func(c *Context) error {
+			return mw(c, next)
+		}
+	}
+
+	return handler(rrpcCtx)
 }
 
 func (s *Server) createContext(ctx context.Context, w http.ResponseWriter, r *http.Request, params *Params) *Context {

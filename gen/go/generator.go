@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"text/template"
 
-	def "github.com/netgarden/rrpc-def"
+	def "github.com/netgarden/rrpc/def"
 )
 
 func NewGenerator() def.Generator {
@@ -25,6 +25,7 @@ func (g *Generator) Generate(definition *def.Module, targetDir string) error {
 	tplFuncs["createFieldDefaultValue"] = createFieldDefaultValue
 	tplFuncs["methodPathParams"] = methodPathParams
 	tplFuncs["methodPathToGo"] = methodPathToGo
+	tplFuncs["methodPathHasStringParam"] = methodPathHasStringParam
 
 	baseTpl, err := template.New("").Funcs(tplFuncs).ParseFS(g.fs, "*.tpl")
 	if err != nil {

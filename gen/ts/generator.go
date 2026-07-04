@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"text/template"
 
-	def "github.com/netgarden/rrpc-def"
+	def "github.com/netgarden/rrpc/def"
 )
 
 func NewGenerator() def.Generator {

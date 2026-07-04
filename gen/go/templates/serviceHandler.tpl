@@ -109,7 +109,9 @@ func (h *{{ firstLetterToUpper $service.Name }}ServiceHandler) handle{{ firstLet
     ctx.Response().Write(respBody)
 
 	{{ else if eq (index $method.Outputs 0).Type "bytes" }}
-        ctx.Response().Header().Set("Content-Type", "application/octet-stream")
+        if ctx.Response().Header().Get("Content-Type") == "" {
+            ctx.Response().Header().Set("Content-Type", "application/octet-stream")
+        }
 
 	{{- end}}
 	{{- end}}

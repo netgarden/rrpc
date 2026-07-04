@@ -17,7 +17,7 @@
 {{- if and (eq (len .Services) 0) (gt (len .Errors) 0) -}}
     {{- $goImports = append $goImports "github.com/netgarden/rrpc" -}}
 {{- end -}}
-package {{ if index .Options "go_package" }}{{ .Options.go_package }}{{ else }}rpc{{ end }}
+package {{ if index .Module.Options "go_package" }}{{ .Module.Options.go_package }}{{ else }}rpc{{ end }}
 
 {{ if gt (len $goImports) 0 -}}
 import (

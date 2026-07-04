@@ -4,7 +4,7 @@ import (
 	"strings"
 	"text/template"
 
-	def "github.com/netgarden/rrpc-def"
+	def "github.com/netgarden/rrpc/def"
 )
 
 func getTemplatesFuncs() template.FuncMap {
@@ -14,6 +14,7 @@ func getTemplatesFuncs() template.FuncMap {
 	funcs["rrpcDataTypeToTSInputType"] = rrpcDataTypeToTSInputType
 	funcs["methodPathParams"] = methodPathParams
 	funcs["methodPathToTS"] = methodPathToTS
+	funcs["methodPathHasPathParam"] = methodPathHasPathParam
 
 	return funcs
 }
@@ -43,6 +44,10 @@ func methodPathParams(path string) []string {
 }
 
 // methodPathToTS converts a path string to a TypeScript expression.
+// "string"-typed params (the default) are escaped as a single path segment
+// via encodeURIComponent; "path"-typed params may themselves contain "/"
+// and are escaped per-segment via escapePathValue so the separators
+// survive.
 // E.g. "/upload/{filename:string}" -> "/upload/" + encodeURIComponent(filename)
 func methodPathToTS(path string) string {
 	var parts []string
@@ -63,14 +68,55 @@ func methodPathToTS(path string) string {
 			break
 		}
 		param := rest[start+1 : start+end]
+		paramType := "string"
 		if colonIdx := strings.Index(param, ":"); colonIdx != -1 {
+			paramType = param[colonIdx+1:]
 			param = param[:colonIdx]
 		}
-		parts = append(parts, "encodeURIComponent("+param+")")
+		parts = append(parts, pathParamEscapeExprTS(paramType, param))
 		rest = rest[start+end+1:]
 	}
 	if len(parts) == 0 {
 		return `"` + path + `"`
 	}
 	return strings.Join(parts, " + ")
+}
+
+// pathParamEscapeExprTS returns the TypeScript expression that escapes a
+// path parameter's value for inclusion in a URL, per its declared type.
+func pathParamEscapeExprTS(paramType, param string) string {
+	switch paramType {
+	case "string":
+		return "encodeURIComponent(" + param + ")"
+	case "path":
+		return "escapePathValue(" + param + ")"
+	default:
+		panic("unknown path parameter type \"" + paramType + "\" for parameter \"" + param + "\" (expected \"string\" or \"path\")")
+	}
+}
+
+// methodPathHasPathParam reports whether path declares at least one
+// "path"-typed (catch-all) path parameter — used to decide whether the
+// generated file needs to import escapePathValue.
+func methodPathHasPathParam(path string) bool {
+	rest := path
+	for {
+		start := strings.Index(rest, "{")
+		if start == -1 {
+			return false
+		}
+		end := strings.Index(rest[start:], "}")
+		if end == -1 {
+			return false
+		}
+		param := rest[start+1 : start+end]
+		paramType := "string"
+		if colonIdx := strings.Index(param, ":"); colonIdx != -1 {
+			paramType = param[colonIdx+1:]
+		}
+		if paramType == "path" {
+			return true
+		}
+		rest = rest[start+end+1:]
+	}
 }

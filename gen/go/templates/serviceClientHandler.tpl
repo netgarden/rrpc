@@ -43,8 +43,12 @@ func (h *{{ firstLetterToUpper $service.Name }}ServiceClientHandler) {{ firstLet
     {{- end }} {
 
     methodType := "{{ $method.Type }}"
+    {{ if eq $method.Path "" -}}
+    url := h.client.url + "/" + h.path
+    {{- else -}}
     methodPath := {{ methodPathToGo $method.Path }}
     url := h.client.url + "/" + h.path + "/" + methodPath
+    {{- end }}
 
     {{ if and (eq (len $method.Inputs) 1) (index $method.Inputs 0).IsStruct -}}
     jsonBody, err := json.Marshal(data)
@@ -53,7 +57,10 @@ func (h *{{ firstLetterToUpper $service.Name }}ServiceClientHandler) {{ firstLet
     }
     {{ end -}}
 
-    {{ if gt (len $method.Outputs) 0 }}r{{ else }}_{{ end }}, err :=
+    {{ if gt (len $method.Outputs) 0 }}r, err :=
+    {{- else if and (eq (len $method.Inputs) 1) (index $method.Inputs 0).IsStruct }}_, err =
+    {{- else }}_, err :=
+    {{- end}}
     {{- if $isMultipart }} h.doMultipartRequest(ctx, methodType, url,
         {{- range $i, $input := $method.Inputs }}{{ if $input.IsStruct }} "{{ $input.Name }}", data,{{ end }}{{ if eq $input.Type "bytes" }} "{{ $input.Name }}", r0{{ end }}{{- end -}}
     )

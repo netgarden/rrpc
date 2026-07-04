@@ -1,6 +1,9 @@
 package rrpc
 
-import "strings"
+import (
+	"net/url"
+	"strings"
+)
 
 type Path struct {
 	Path   string
@@ -72,4 +75,17 @@ func ParsePath(path string) *Path {
 	}
 
 	return ret
+}
+
+// EscapePathValue encodes value for safe inclusion in a URL path built from
+// a "path"-typed parameter, which — unlike a "string"-typed one — may
+// itself contain "/" separators that must be preserved rather than
+// escaped away. Each segment between slashes is percent-encoded
+// individually; the separators themselves are not.
+func EscapePathValue(value string) string {
+	segments := strings.Split(value, "/")
+	for i, segment := range segments {
+		segments[i] = url.PathEscape(segment)
+	}
+	return strings.Join(segments, "/")
 }

@@ -45,8 +45,12 @@ class {{ firstLetterToUpper .Name }}ServiceHandler {
     {{- end }}> {
 
         const method = "{{ $method.Type }}";
+        {{ if eq $method.Path "" -}}
+        const uri = ('/' + this._path).replace(/\/+/g, '/');
+        {{- else -}}
         const methodPath = {{ methodPathToTS $method.Path }};
         const uri = ('/' + this._path + '/' + methodPath).replace(/\/+/g, '/');
+        {{- end }}
 
         let reqUri : string = uri;
         let reqBody : string | Uint8Array | FormData | null = null;
