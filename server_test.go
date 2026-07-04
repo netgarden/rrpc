@@ -411,6 +411,132 @@ func TestServer_OnRequestHook_Passes(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// Middleware
+// ---------------------------------------------------------------------------
+
+func TestServer_Middleware_Executes(t *testing.T) {
+	mod := testmodule.NewModule()
+	mod.SetPingService(&pingService{})
+
+	var called bool
+	srv := rrpc.NewServer()
+	srv.RegisterModule(mod)
+	srv.Use(func(ctx *rrpc.Context, next func(*rrpc.Context) error) error {
+		called = true
+		return next(ctx)
+	})
+
+	req := httptest.NewRequest("GET", "/test/ping", nil)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	if !called {
+		t.Error("middleware was not called")
+	}
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+}
+
+func TestServer_Middleware_Order(t *testing.T) {
+	mod := testmodule.NewModule()
+	mod.SetPingService(&pingService{})
+
+	var order []int
+	srv := rrpc.NewServer()
+	srv.RegisterModule(mod)
+	srv.Use(
+		func(ctx *rrpc.Context, next func(*rrpc.Context) error) error {
+			order = append(order, 1)
+			err := next(ctx)
+			order = append(order, 4)
+			return err
+		},
+		func(ctx *rrpc.Context, next func(*rrpc.Context) error) error {
+			order = append(order, 2)
+			err := next(ctx)
+			order = append(order, 3)
+			return err
+		},
+	)
+
+	req := httptest.NewRequest("GET", "/test/ping", nil)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	expected := []int{1, 2, 3, 4}
+	for i, v := range expected {
+		if i >= len(order) || order[i] != v {
+			t.Errorf("expected middleware order %v, got %v", expected, order)
+			break
+		}
+	}
+}
+
+func TestServer_Middleware_ShortCircuit(t *testing.T) {
+	mod := testmodule.NewModule()
+	mod.SetPingService(&pingService{})
+
+	srv := rrpc.NewServer()
+	srv.RegisterModule(mod)
+	srv.Use(func(ctx *rrpc.Context, next func(*rrpc.Context) error) error {
+		return rrpc.RRPCError{Code: 99, Name: "Unauthorized", Message: "not allowed", HTTPStatus: http.StatusUnauthorized}
+	})
+
+	req := httptest.NewRequest("GET", "/test/ping", nil)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", w.Code)
+	}
+}
+
+func TestServer_Middleware_AccessesPathParams(t *testing.T) {
+	mod := testmodule.NewModule()
+	mod.SetPingService(&pingService{})
+
+	var capturedName string
+	srv := rrpc.NewServer()
+	srv.RegisterModule(mod)
+	srv.Use(func(ctx *rrpc.Context, next func(*rrpc.Context) error) error {
+		capturedName = ctx.Params().GetString("name")
+		return next(ctx)
+	})
+
+	req := httptest.NewRequest("GET", "/test/greet/Alice", nil)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d — body: %s", w.Code, w.Body.String())
+	}
+	if capturedName != "Alice" {
+		t.Errorf("expected 'Alice', got %q", capturedName)
+	}
+}
+
+func TestServer_Middleware_AddsResponseHeader(t *testing.T) {
+	mod := testmodule.NewModule()
+	mod.SetPingService(&pingService{})
+
+	srv := rrpc.NewServer()
+	srv.RegisterModule(mod)
+	srv.Use(func(ctx *rrpc.Context, next func(*rrpc.Context) error) error {
+		ctx.Response().Header().Set("X-Middleware", "yes")
+		return next(ctx)
+	})
+
+	req := httptest.NewRequest("GET", "/test/ping", nil)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	if got := w.Header().Get("X-Middleware"); got != "yes" {
+		t.Errorf("expected X-Middleware header 'yes', got %q", got)
+	}
+}
+
+// ---------------------------------------------------------------------------
 // Duplicate module registration
 // ---------------------------------------------------------------------------
 
