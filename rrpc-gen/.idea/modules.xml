@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ProjectModuleManager">
+    <modules>
+      <module fileurl="file://$PROJECT_DIR$/.idea/rrpc.iml" filepath="$PROJECT_DIR$/.idea/rrpc.iml" />
+      <module fileurl="file://$PROJECT_DIR$/../rrpc-def/.idea/rrpc-def.iml" filepath="$PROJECT_DIR$/../rrpc-def/.idea/rrpc-def.iml" />
+      <module fileurl="file://$PROJECT_DIR$/../rrpc-gen-go/.idea/rrpc-gen-go.iml" filepath="$PROJECT_DIR$/../rrpc-gen-go/.idea/rrpc-gen-go.iml" />
+      <module fileurl="file://$PROJECT_DIR$/../rrpc-gen-ts/.idea/rrpc-gen-ts.iml" filepath="$PROJECT_DIR$/../rrpc-gen-ts/.idea/rrpc-gen-ts.iml" />
+    </modules>
+  </component>
+</project>
