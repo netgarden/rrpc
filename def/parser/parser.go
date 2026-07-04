@@ -7,12 +7,34 @@ import (
 	"slices"
 	"unicode"
 
-	def "github.com/netgarden/rrpc-def"
-	"github.com/netgarden/rrpc-def/lexer"
+	def "github.com/netgarden/rrpc/def"
+	"github.com/netgarden/rrpc/def/lexer"
 )
 
 func New() *Parser {
 	return &Parser{}
+}
+
+// identLikeTokens are tokens whose literal text is valid as an identifier
+// (struct/service/method/field/error/option name) even though the lexer
+// classifies them as structural keywords when they appear at the start of a
+// top-level statement (e.g. "name = ..."). The lexer is context-free, so it
+// always emits e.g. NAME for the literal "name" regardless of position; the
+// parser resolves the ambiguity by accepting these tokens anywhere an IDENT
+// is expected in a naming position.
+var identLikeTokens = []lexer.Token{
+	lexer.IDENT,
+	lexer.NAME,
+	lexer.VERSION,
+	lexer.OPTION,
+	lexer.STRUCT,
+	lexer.SERVICE,
+	lexer.INCLUDE,
+	lexer.ERROR,
+}
+
+func (p *Parser) readIdent(lex *lexer.Reader) (*lexer.Item, error) {
+	return p.readLexItem(lex, identLikeTokens...)
 }
 
 type Parser struct {
@@ -215,7 +237,7 @@ func (p *Parser) parseOption(lex *lexer.Reader, source *def.SourceOrigin) error 
 		return err
 	}
 
-	item, err = p.readLexItem(lex, lexer.IDENT)
+	item, err = p.readIdent(lex)
 	if err != nil {
 		return err
 	}
@@ -255,7 +277,7 @@ func (p *Parser) parseStruct(lex *lexer.Reader, source *def.SourceOrigin) error 
 		return err
 	}
 
-	item, err = p.readLexItem(lex, lexer.IDENT)
+	item, err = p.readIdent(lex)
 	if err != nil {
 		return err
 	}
@@ -323,7 +345,7 @@ func (p *Parser) parseService(lex *lexer.Reader, source *def.SourceOrigin, annot
 		return err
 	}
 
-	item, err = p.readLexItem(lex, lexer.IDENT)
+	item, err = p.readIdent(lex)
 	if err != nil {
 		return err
 	}
@@ -392,7 +414,7 @@ func (p *Parser) parseServiceMethod(lex *lexer.Reader) (*def.Method, error) {
 
 	annotations, err := p.readAnnotations(lex)
 
-	item, err = p.readLexItem(lex, lexer.IDENT)
+	item, err = p.readIdent(lex)
 	if err != nil {
 		return nil, err
 	}
@@ -501,7 +523,7 @@ func (p *Parser) parseError(lex *lexer.Reader, source *def.SourceOrigin) error {
 		return err
 	}
 
-	item, err = p.readLexItem(lex, lexer.IDENT)
+	item, err = p.readIdent(lex)
 	if err != nil {
 		return err
 	}
@@ -525,7 +547,7 @@ func (p *Parser) parseError(lex *lexer.Reader, source *def.SourceOrigin) error {
 
 		p.skipLexItem(lex, lexer.WHITESPACE, lexer.NEWLINE)
 
-		item, err = p.readLexItem(lex, lexer.IDENT)
+		item, err = p.readIdent(lex)
 		if err != nil {
 			return err
 		}
@@ -604,7 +626,7 @@ func (p *Parser) parseField(lex *lexer.Reader, withName bool) (*def.Field, error
 	fieldName := ""
 	if withName {
 
-		item, err = p.readLexItem(lex, lexer.IDENT)
+		item, err = p.readIdent(lex)
 		if err != nil {
 			return nil, err
 		}

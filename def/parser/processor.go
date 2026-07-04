@@ -5,7 +5,7 @@ import (
 	"slices"
 	"strings"
 
-	def "github.com/netgarden/rrpc-def"
+	def "github.com/netgarden/rrpc/def"
 )
 
 func NewProcessor() *Processor {
@@ -69,9 +69,8 @@ func (p *Processor) sourceOriginToSource(module *def.Module, sourceOrigin *def.S
 	for _, serviceDef := range sourceOrigin.Services {
 
 		serviceDef.Path = serviceDef.Name
-		pathAnnotation := p.getAnnotationValue(serviceDef.Annotations, "Path")
-		if pathAnnotation != "" {
-			serviceDef.Path = pathAnnotation
+		if p.hasAnnotation(serviceDef.Annotations, "Path") {
+			serviceDef.Path = p.getAnnotationValue(serviceDef.Annotations, "Path")
 		}
 
 		serviceDef.Source = source
@@ -80,9 +79,8 @@ func (p *Processor) sourceOriginToSource(module *def.Module, sourceOrigin *def.S
 		for _, methodDef := range serviceDef.Methods {
 
 			methodDef.Path = methodDef.Name
-			pathAnnotation := p.getAnnotationValue(methodDef.Annotations, "Path")
-			if pathAnnotation != "" {
-				methodDef.Path = pathAnnotation
+			if p.hasAnnotation(methodDef.Annotations, "Path") {
+				methodDef.Path = p.getAnnotationValue(methodDef.Annotations, "Path")
 			}
 
 			typeAnnotation := p.getAnnotationValue(methodDef.Annotations, "method")
@@ -131,6 +129,15 @@ func (p *Processor) getAnnotationValue(annotations []*def.Annotation, name strin
 	return ""
 }
 
+func (p *Processor) hasAnnotation(annotations []*def.Annotation, name string) bool {
+	for _, annotation := range annotations {
+		if annotation.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
 func (p *Processor) addSourceToModule(module *def.Module, source *def.Source) error {
 
 	if module.MainSource == nil {
@@ -148,7 +155,9 @@ func (p *Processor) addSourceToModule(module *def.Module, source *def.Source) er
 		return fmt.Errorf("name is not specified in main source file")
 	}
 
-	module.Name = source.Name
+	if module.MainSource == source {
+		module.Name = source.Name
+	}
 
 	// -- Version
 
@@ -158,7 +167,9 @@ func (p *Processor) addSourceToModule(module *def.Module, source *def.Source) er
 		return fmt.Errorf("version is not specified in main source file")
 	}
 
-	module.Version = source.Version
+	if module.MainSource == source {
+		module.Version = source.Version
+	}
 
 	// -- Options
 
@@ -166,7 +177,9 @@ func (p *Processor) addSourceToModule(module *def.Module, source *def.Source) er
 		return fmt.Errorf("options can be defined only in main source file")
 	}
 
-	module.Options = source.Options
+	if module.MainSource == source {
+		module.Options = source.Options
+	}
 
 	// -- Structs
 

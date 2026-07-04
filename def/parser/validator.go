@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"slices"
 
-	def "github.com/netgarden/rrpc-def"
+	def "github.com/netgarden/rrpc/def"
 )
 
 func NewValidator() *Validator {
