@@ -1,0 +1,20 @@
+{
+  "name": "@netgarden/rrpc",
+  "version": "0.0.1",
+  "description": "TypeScript client runtime for the RRPC REST/RPC framework",
+  "keywords": [
+    "rest",
+    "rpc"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "github.com/netgarden/rrpc-ts"
+  },
+  "license": "GPL-2.0",
+  "author": "Miroslav Misek",
+  "type": "typescript",
+  "main": "index.ts",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  }
+}
