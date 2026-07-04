@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="VcsDirectoryMappings">
+    <mapping directory="$PROJECT_DIR$/rrpc" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/rrpc-def" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/rrpc-gen" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/rrpc-gen-go" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/rrpc-gen-ts" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/rrpc-test" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/rrpc-ts" vcs="Git" />
+  </component>
+</project>
