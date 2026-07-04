@@ -1,0 +1,24 @@
+name = "auth"
+version = "0.0.1"
+
+option go_package = "auth"
+
+struct LoginRequest {
+    username string
+    password string
+}
+
+struct LoginResponse {
+    ok bool
+}
+
+error AuthenticationError {
+    code = 1
+    http_code = 401
+    message = "authentication failed"
+}
+
+service Auth {
+    login(request LoginRequest) (LoginResponse)
+    logout()
+}

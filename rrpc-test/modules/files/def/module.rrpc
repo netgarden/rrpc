@@ -1,0 +1,23 @@
+name = "files"
+version = "0.0.1"
+
+option go_package = "files"
+
+struct UploadDataInfo {
+    filename string
+}
+
+@Path("/files")
+service Files {
+    @method("PUT")
+    @Path("/upload/{filename:string}")
+    upload(data bytes)
+
+    @method("POST")
+    @Path("/upload2")
+    upload2(info UploadDataInfo, data bytes)
+
+    @method("GET")
+    @Path("/download/{filename:string}")
+    download() bytes
+}
