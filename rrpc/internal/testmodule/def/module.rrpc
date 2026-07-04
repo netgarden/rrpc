@@ -1,0 +1,86 @@
+name = "testmodule"
+version = "0.0.1"
+
+option go_package = "testmodule"
+
+struct EchoRequest {
+    message string
+    count int
+}
+
+struct EchoResponse {
+    result string
+}
+
+struct GreetResponse {
+    greeting string
+}
+
+struct SumRequest {
+    a int
+    b int
+}
+
+struct SumResponse {
+    total int
+}
+
+struct UploadInfo {
+    filename string
+}
+
+error NotFoundError {
+    code = 1
+    http_code = 404
+    message = "not found"
+}
+
+error ForbiddenError {
+    code = 2
+    http_code = 403
+    message = "forbidden"
+}
+
+@Path("/test")
+service Ping {
+    @method("GET")
+    @Path("/ping")
+    ping()
+
+    @method("GET")
+    @Path("/greet/{name:string}")
+    greet() (GreetResponse)
+
+    @method("GET")
+    @Path("/fail")
+    fail()
+}
+
+@Path("/test")
+service Echo {
+    @method("GET")
+    @Path("/echo")
+    echo(request EchoRequest) (EchoResponse)
+}
+
+@Path("/test")
+service Compute {
+    @method("POST")
+    @Path("/sum")
+    sum(request SumRequest) (SumResponse)
+}
+
+@Path("/test")
+service Store {
+    @method("PUT")
+    @Path("/upload")
+    upload(data bytes)
+
+    @method("POST")
+    @Path("/upload2")
+    upload2(info UploadInfo, data bytes)
+
+    @method("GET")
+    @Path("/download")
+    download() bytes
+}
