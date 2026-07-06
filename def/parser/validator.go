@@ -3,6 +3,7 @@ package parser
 import (
 	"fmt"
 	"slices"
+	"strings"
 
 	def "github.com/netgarden/rrpc/def"
 )
@@ -112,12 +113,34 @@ func (v *Validator) validateQueryParamStruct(service *def.Service, method *def.M
 		return fmt.Errorf("method %s.%s: struct type %s not found", service.Name, method.Name, input.Type)
 	}
 	for _, field := range structDef.Fields {
-		if !slices.Contains(SupportedPrimitiveTypes, field.Type) && field.Type != "bytes" {
-			return fmt.Errorf(
-				"method %s.%s: struct %s field %s must be a primitive type for %s methods, got %s",
-				service.Name, method.Name, input.Type, field.Name, method.Type, field.Type,
-			)
+		if slices.Contains(SupportedPrimitiveTypes, field.Type) || field.Type == "bytes" {
+			continue
 		}
+		if isQueryParamMapType(field.Type) {
+			continue
+		}
+		return fmt.Errorf(
+			"method %s.%s: struct %s field %s must be a primitive type (or a map[string]<primitive>) for %s methods, got %s",
+			service.Name, method.Name, input.Type, field.Name, method.Type, field.Type,
+		)
 	}
 	return nil
+}
+
+// isQueryParamMapType reports whether fieldType is a "map[string]V" where
+// V is itself a supported primitive — the shape rrpc.DecodeQueryParams
+// can reconstruct from bracket-notation query keys (e.g.
+// "filters[name]=foo"). The key type is required to be "string" since
+// query parameter keys always are; other map shapes aren't decodable
+// from a query string and stay rejected, same as before.
+func isQueryParamMapType(fieldType string) bool {
+	if !strings.HasPrefix(fieldType, "map[") {
+		return false
+	}
+	parts := strings.SplitN(fieldType[4:], "]", 2)
+	if len(parts) != 2 {
+		return false
+	}
+	keyType, valueType := parts[0], parts[1]
+	return keyType == "string" && slices.Contains(SupportedPrimitiveTypes, valueType)
 }

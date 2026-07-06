@@ -75,6 +75,15 @@ class {{ firstLetterToUpper .Name }}ServiceHandler {
             if (value === null || value === undefined) continue;
             if (value instanceof Uint8Array) {
                 queryParams.set(key, btoa(String.fromCharCode(...value)));
+            } else if (typeof value === 'object') {
+                // A map-typed field (e.g. DatatableRequest.filters) — browsers
+                // have no native nested-query-param representation, so encode
+                // each entry as bracket notation ("key[subkey]=value"); the
+                // server's DecodeQueryParams regroups these before unmarshaling.
+                for (const [subkey, subvalue] of Object.entries(value as Record<string, unknown>)) {
+                    if (subvalue === null || subvalue === undefined) continue;
+                    queryParams.set(`${key}[${subkey}]`, String(subvalue));
+                }
             } else {
                 queryParams.set(key, String(value));
             }

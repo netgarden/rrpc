@@ -1,6 +1,7 @@
 package rrpc_gen_go
 
 import (
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -51,6 +52,17 @@ func (g *Generator) Generate(definition *def.Module, targetDir string) error {
 		}
 
 		name := source.SourceName[:len(source.SourceName)-len(filepath.Ext(source.SourceName))]
+		if name != filepath.Base(name) {
+			// Defense in depth: SourceName is expected to be a bare
+			// filename (see def/parser/parser.go), but if it ever again
+			// carried a directory component (e.g. "../" from a path
+			// relative to some other directory), joining it into target
+			// below would silently write outside targetDir entirely —
+			// exactly the bug that once sent a cross-repo include's
+			// generated file into the *included* file's own directory
+			// instead of this module's.
+			return fmt.Errorf("rrpc-gen: source name %q must be a bare filename, not a path", source.SourceName)
+		}
 		target := filepath.Join(targetDir, name+".gen.go")
 
 		err = g.executeSourceTemplate(sourceTpl, target, source)
@@ -58,11 +70,20 @@ func (g *Generator) Generate(definition *def.Module, targetDir string) error {
 			return err
 		}
 
-		handlerTarget := filepath.Join(targetDir, name+"_handler.gen.go")
+		// sourceHandler.tpl unconditionally imports context/json/io/http/
+		// strconv/rrpc for its service-handling boilerplate — only
+		// meaningful (and only compiles without "imported and not used")
+		// when the source actually declares a service. A source with only
+		// structs (e.g. one meant purely to be "include"d for its types,
+		// like maf/datatables' own datatable.rrpc) has nothing for a
+		// handler file to do.
+		if len(source.Services) > 0 {
+			handlerTarget := filepath.Join(targetDir, name+"_handler.gen.go")
 
-		err = g.executeSourceTemplate(sourceHandlerTpl, handlerTarget, source)
-		if err != nil {
-			return err
+			err = g.executeSourceTemplate(sourceHandlerTpl, handlerTarget, source)
+			if err != nil {
+				return err
+			}
 		}
 
 	}

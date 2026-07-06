@@ -14,6 +14,13 @@ func rrpcDataTypeToTSType(dataType string) string {
 	}
 
 	if strings.HasPrefix(dataType, "map[") {
+		// Mirrors def/parser/processor.go's checkDataType parsing of the
+		// same "map[K]V" syntax, which has already validated K/V by the
+		// time codegen runs.
+		parts := strings.SplitN(dataType[4:], "]", 2)
+		if len(parts) == 2 {
+			return "Record<" + rrpcDataTypeToTSType(parts[0]) + ", " + rrpcDataTypeToTSType(parts[1]) + ">"
+		}
 		return "any"
 	}
 

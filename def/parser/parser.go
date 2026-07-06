@@ -38,18 +38,34 @@ func (p *Parser) readIdent(lex *lexer.Reader) (*lexer.Item, error) {
 }
 
 type Parser struct {
-	mainFileDir string
 	currentFile string
 }
 
 func (p *Parser) Parse(filePath string) (*def.Module, error) {
 
-	p.mainFileDir = filepath.Dir(filePath)
-
 	toProcess := make(chan string, 500)
 	toProcess <- filePath
 
 	sources := make([]*def.SourceOrigin, 0)
+
+	// closeIfDrained closes toProcess once nothing else is queued behind
+	// the item just received — the signal this single-goroutine producer/
+	// consumer loop uses to know it's done. Must run on *every* iteration
+	// that doesn't itself push more work, not just the "freshly parsed"
+	// path below: the same file can legitimately be "include"d from more
+	// than one other source in the same module (e.g. two sibling files
+	// both including one shared, common definitions file) — when the
+	// *second* such include is the last item in the channel, it hits the
+	// "already processed" branch, and if that branch doesn't also check
+	// here, the loop blocks on `range toProcess` forever waiting for a
+	// close that will never come. Confirmed by hitting this exact hang
+	// with two citadel .rrpc files both including maf/datatables' shared
+	// datatable.rrpc.
+	closeIfDrained := func() {
+		if len(toProcess) == 0 {
+			close(toProcess)
+		}
+	}
 
 	for sourcePath := range toProcess {
 
@@ -62,6 +78,7 @@ func (p *Parser) Parse(filePath string) (*def.Module, error) {
 		}
 
 		if processed {
+			closeIfDrained()
 			continue
 		}
 
@@ -79,9 +96,7 @@ func (p *Parser) Parse(filePath string) (*def.Module, error) {
 			toProcess <- includePath
 		}
 
-		if len(toProcess) == 0 {
-			close(toProcess)
-		}
+		closeIfDrained()
 
 		sources = append(sources, source)
 
@@ -110,12 +125,16 @@ func (p *Parser) parseFile(filePath string) (*def.SourceOrigin, error) {
 	}
 	defer f.Close()
 
-	relPath, err := filepath.Rel(p.mainFileDir, filePath)
-	if err != nil {
-		return nil, err
-	}
-
-	source := def.NewSourceOrigin(filePath, relPath)
+	// SourceName is the file's own basename, not a path relative to the
+	// entry file's directory — an `include` can point anywhere on disk
+	// (e.g. a sibling repo via "../../../other/def/x.rrpc"), and
+	// gen/go/generator.go joins this name directly into its output path
+	// to derive each source's own "<name>.gen.go" file. A relative path
+	// containing ".." segments would silently resolve outside targetDir
+	// once joined — confirmed by an actual cross-repo include landing its
+	// generated file inside the *included* file's own directory instead
+	// of the consuming module's target directory.
+	source := def.NewSourceOrigin(filePath, filepath.Base(filePath))
 
 	lex := lexer.New(f)
 	r := lexer.NewReader(lex)
