@@ -9,9 +9,10 @@ import (
 )
 
 type Cmd struct {
-	genType string
-	source  string
-	target  string
+	genType      string
+	source       string
+	target       string
+	tsRRPCImport string
 }
 
 func main() {
@@ -22,6 +23,7 @@ func main() {
 	app.Flag("source", "Source file").Short('s').Required().StringVar(&cmd.source)
 	app.Flag("target", "Target directory").Short('d').Required().StringVar(&cmd.target)
 	app.Flag("type", "Generator type. Available: go, ts").Short('t').Default("go").StringVar(&cmd.genType)
+	app.Flag("ts-rrpc-import", `Import specifier generated TS code uses for the RRPC runtime (ts generator only, default "$lib/rrpc")`).StringVar(&cmd.tsRRPCImport)
 
 	_, err := app.Parse(os.Args[1:])
 	if err != nil {
@@ -43,7 +45,7 @@ func (c *Cmd) run() error {
 		return err
 	}
 
-	generator, err := gen.NewGenerator(c.genType)
+	generator, err := gen.NewGenerator(c.genType, c.tsRRPCImport)
 	if err != nil {
 		return err
 	}

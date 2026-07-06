@@ -1,5 +1,5 @@
 {{ define "rrpcClient" -}}
 
-import { RRPCClient, RRPCResponse, RRPCError } from "$lib/rrpc";
+import { RRPCClient, RRPCResponse, RRPCError } from "{{ rrpcImportPath }}";
 
 {{- end }}

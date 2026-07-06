@@ -7,13 +7,16 @@ import (
 	rrpcGenTs "github.com/netgarden/rrpc/gen/ts"
 )
 
-func NewGenerator(genType string) (def.Generator, error) {
+// tsRRPCImportPath, if non-empty, overrides where "ts"-generated code
+// imports the RRPC TS runtime from (default "$lib/rrpc") — see
+// rrpc_gen_ts.WithRRPCImportPath. Ignored for "go".
+func NewGenerator(genType string, tsRRPCImportPath string) (def.Generator, error) {
 
 	switch genType {
 	case "go":
 		return rrpcGenGo.NewGenerator(), nil
 	case "ts":
-		return rrpcGenTs.NewGenerator(), nil
+		return rrpcGenTs.NewGenerator(rrpcGenTs.WithRRPCImportPath(tsRRPCImportPath)), nil
 	default:
 		return nil, fmt.Errorf("unsupported generator type: %s", genType)
 	}

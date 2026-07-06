@@ -4,7 +4,7 @@
         {{- if methodPathHasPathParam $method.Path -}}{{- $needsEscapePathValue = true -}}{{- end -}}
     {{- end -}}
 {{- end -}}
-import { RRPCClient, RRPCResponse{{ if $needsEscapePathValue }}, escapePathValue{{ end }} } from "$lib/rrpc";
+import { RRPCClient, RRPCResponse{{ if $needsEscapePathValue }}, escapePathValue{{ end }} } from "{{ rrpcImportPath }}";
 
 {{ template "client" . }}
 
