@@ -3,11 +3,13 @@
 {{- if gt (len .Services) 0 -}}
     {{- range $serviceKey, $service := .Services -}}
         {{- range $methodKey, $method := $service.Methods -}}
+            {{- if not $method.Streaming -}}
             {{- range $fieldKey, $field := $method.Inputs -}}
                 {{- if eq $field.Type "bytes" -}}{{- $needsIo = true -}}{{- end -}}
             {{- end -}}
             {{- range $fieldKey, $field := $method.Outputs -}}
                 {{- if eq $field.Type "bytes" -}}{{- $needsIo = true -}}{{- end -}}
+            {{- end -}}
             {{- end -}}
         {{- end -}}
     {{- end -}}

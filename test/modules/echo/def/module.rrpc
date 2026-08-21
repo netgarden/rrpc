@@ -13,8 +13,43 @@ struct EchoResponse {
     result string
 }
 
+struct ChatMessage {
+    text string
+}
+
+struct ChatReply {
+    from string
+    text string
+}
+
+struct LogLine {
+    line string
+}
+
+struct TickResponse {
+    n int
+}
+
+error StreamTriggerError {
+    code = 1
+    http_code = 400
+    message = "trigger error for testing SendError"
+}
+
 @Path("/echo")
 service Echo {
     @method("GET")
     Echo(request EchoRequest) (EchoResponse)
+
+    @Stream
+    Chat(request ChatMessage) (ChatReply)
+
+    @InputStream
+    Collect(request LogLine)
+
+    @OutputStream
+    Tick() (TickResponse)
+
+    @InputStream
+    UploadBytes(request bytes)
 }

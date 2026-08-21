@@ -3,6 +3,7 @@ package test
 import (
     "io"
     "net/http"
+    "strings"
 )
 
 var DataMethods = []string{"POST", "PUT"}
@@ -35,6 +36,19 @@ type Client struct {
 
 func (c *Client) Do(req *http.Request) (*http.Response, error) {
     return c.client.Do(req)
+}
+
+// toWebSocketURL swaps an "http"/"https" base URL for its "ws"/"wss"
+// counterpart - used by generated streaming client methods to dial, since
+// websocket.Dial requires a ws(s):// URL, not http(s)://.
+func toWebSocketURL(httpURL string) string {
+    if strings.HasPrefix(httpURL, "https://") {
+        return "wss://" + strings.TrimPrefix(httpURL, "https://")
+    }
+    if strings.HasPrefix(httpURL, "http://") {
+        return "ws://" + strings.TrimPrefix(httpURL, "http://")
+    }
+    return httpURL
 }
 
 func NewSizedReader(r io.Reader, size int64) *SizedReader {

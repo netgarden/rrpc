@@ -83,20 +83,63 @@ func (p *Processor) sourceOriginToSource(module *def.Module, sourceOrigin *def.S
 				methodDef.Path = p.getAnnotationValue(methodDef.Annotations, "Path")
 			}
 
+			// @Stream/@InputStream/@OutputStream are mutually exclusive
+			// with each other (a method streams in at most one shape) and
+			// with @method (a WebSocket upgrade is always an HTTP GET, so
+			// there's nothing for @method to meaningfully override).
+			streamAnnotationCount := 0
+			if p.hasAnnotation(methodDef.Annotations, "Stream") {
+				streamAnnotationCount++
+				methodDef.Streaming = true
+				methodDef.StreamDirection = "both"
+			}
+			if p.hasAnnotation(methodDef.Annotations, "InputStream") {
+				streamAnnotationCount++
+				methodDef.Streaming = true
+				methodDef.StreamDirection = "in"
+			}
+			if p.hasAnnotation(methodDef.Annotations, "OutputStream") {
+				streamAnnotationCount++
+				methodDef.Streaming = true
+				methodDef.StreamDirection = "out"
+			}
+			if streamAnnotationCount > 1 {
+				return nil, fmt.Errorf(
+					"method %s.%s: at most one of @Stream, @InputStream, @OutputStream may be specified",
+					serviceDef.Name,
+					methodDef.Name,
+				)
+			}
+
 			typeAnnotation := p.getAnnotationValue(methodDef.Annotations, "method")
-			if typeAnnotation != "" {
+			if methodDef.Streaming {
+				if typeAnnotation != "" {
+					return nil, fmt.Errorf(
+						"method %s.%s: @method cannot be combined with @Stream/@InputStream/@OutputStream",
+						serviceDef.Name,
+						methodDef.Name,
+					)
+				}
+				methodDef.Type = "GET"
+			} else if typeAnnotation != "" {
 				methodDef.Type = typeAnnotation
 			}
 
 			if methodDef.Type == "GET" || methodDef.Type == "HEAD" || methodDef.Type == "DELETE" {
-				for _, input := range methodDef.Inputs {
-					if input.Type == "bytes" {
-						return nil, fmt.Errorf(
-							"method %s.%s: bytes input is not allowed for %s methods",
-							serviceDef.Name,
-							methodDef.Name,
-							methodDef.Type,
-						)
+				// A streaming method's "bytes" input/output means "raw
+				// byte stream", not "HTTP request body" - the ordinary
+				// GET-bodies-are-query-params restriction below doesn't
+				// apply to it at all.
+				if !methodDef.Streaming {
+					for _, input := range methodDef.Inputs {
+						if input.Type == "bytes" {
+							return nil, fmt.Errorf(
+								"method %s.%s: bytes input is not allowed for %s methods",
+								serviceDef.Name,
+								methodDef.Name,
+								methodDef.Type,
+							)
+						}
 					}
 				}
 			} else if methodDef.Type != "POST" && methodDef.Type != "PUT" && len(methodDef.Inputs) > 0 {
@@ -106,7 +149,6 @@ func (p *Processor) sourceOriginToSource(module *def.Module, sourceOrigin *def.S
 					methodDef.Name,
 				)
 			}
-
 
 		}
 

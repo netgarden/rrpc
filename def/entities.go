@@ -146,6 +146,12 @@ type Method struct {
 	Inputs      []*Field
 	Outputs     []*Field
 	Annotations []*Annotation
+	// Streaming and StreamDirection are set by the processor when a
+	// method carries @Stream/@InputStream/@OutputStream. StreamDirection
+	// is one of "both"/"in"/"out" and is only meaningful when Streaming
+	// is true.
+	Streaming       bool
+	StreamDirection string
 }
 
 func NewOption(name string, value string) *Option {

@@ -10,6 +10,7 @@ type Context struct {
 	response http.ResponseWriter
 	params   *Params
 	values   map[any]any
+	hijacked bool
 }
 
 func NewContext(request *http.Request, response http.ResponseWriter, params *Params) *Context {
@@ -49,4 +50,22 @@ func (c *Context) IsHTTPS() bool {
 		return true
 	}
 	return strings.EqualFold(c.request.Header.Get("X-Forwarded-Proto"), "https")
+}
+
+// Hijacked reports whether this request's response has already been
+// handled by a WebSocket upgrade attempt (see Upgrade*/UpgradeRaw* in
+// websocket.go) - true both when the upgrade succeeded and when it was
+// attempted but failed, since the underlying WebSocket library writes its
+// own response to Response() in either case. Once true, Response() is no
+// longer usable for a normal HTTP response - the server will not attempt
+// to write a JSON error body for whatever error the handler eventually
+// returns.
+func (c *Context) Hijacked() bool {
+	return c.hijacked
+}
+
+// markHijacked records that a WebSocket upgrade was attempted - called
+// from Upgrade*/UpgradeRaw* regardless of whether the attempt succeeded.
+func (c *Context) markHijacked() {
+	c.hijacked = true
 }

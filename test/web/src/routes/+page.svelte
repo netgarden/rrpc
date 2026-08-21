@@ -3,7 +3,7 @@
     import { TestClient } from '$lib/test';
     import { FilesClient } from '$lib/files';
     import { EchoClient } from '$lib/echo';
-    import { RRPCError } from '$lib/rrpc';
+    import { RRPCError } from 'rrpc-client';
 
     function errMsg(e: unknown): string {
         if (e instanceof Error || e instanceof RRPCError) {

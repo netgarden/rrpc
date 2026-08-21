@@ -23,6 +23,30 @@ func newEchoServiceHandler(service EchoService) *EchoServiceHandler {
             ContentType: "application/json",
             HandlerFunc: serviceHandler.handleEcho,
         },
+        {
+            Path:        rrpc.ParsePath("Chat"),
+            Type:        "GET",
+            ContentType: "application/json",
+            HandlerFunc: serviceHandler.handleChat,
+        },
+        {
+            Path:        rrpc.ParsePath("Collect"),
+            Type:        "GET",
+            ContentType: "application/json",
+            HandlerFunc: serviceHandler.handleCollect,
+        },
+        {
+            Path:        rrpc.ParsePath("Tick"),
+            Type:        "GET",
+            ContentType: "",
+            HandlerFunc: serviceHandler.handleTick,
+        },
+        {
+            Path:        rrpc.ParsePath("UploadBytes"),
+            Type:        "GET",
+            ContentType: "application/octet-stream",
+            HandlerFunc: serviceHandler.handleUploadBytes,
+        },
     }
     serviceHandler.service = service
 
@@ -82,6 +106,38 @@ func (h *EchoServiceHandler) handleEcho(ctx *rrpc.Context) error {
 	return nil
 }
 
+func (h *EchoServiceHandler) handleChat(ctx *rrpc.Context) error {
+    stream, err := rrpc.UpgradeStream[ChatMessage, ChatReply](ctx, rrpc.UpgradeOptions{})
+    if err != nil {
+        return err
+    }
+    return h.service.Chat(ctx, stream)
+}
+
+func (h *EchoServiceHandler) handleCollect(ctx *rrpc.Context) error {
+    stream, err := rrpc.UpgradeInStream[LogLine](ctx, rrpc.UpgradeOptions{})
+    if err != nil {
+        return err
+    }
+    return h.service.Collect(ctx, stream)
+}
+
+func (h *EchoServiceHandler) handleTick(ctx *rrpc.Context) error {
+    stream, err := rrpc.UpgradeOutStream[TickResponse](ctx, rrpc.UpgradeOptions{})
+    if err != nil {
+        return err
+    }
+    return h.service.Tick(ctx, stream)
+}
+
+func (h *EchoServiceHandler) handleUploadBytes(ctx *rrpc.Context) error {
+    stream, err := rrpc.UpgradeRawInStream(ctx, rrpc.UpgradeOptions{})
+    if err != nil {
+        return err
+    }
+    return h.service.UploadBytes(ctx, stream)
+}
+
 
 
 func (h *EchoServiceHandler) readBody(r *http.Request) ([]byte, error) {
@@ -112,7 +168,7 @@ func (h *EchoServiceClientHandler) Echo(ctx context.Context, data *EchoRequest) 
 
     methodType := "GET"
     methodPath := "Echo"
-    url := h.client.url + "/" + h.path + "/" + methodPath
+    url := joinURLPath(h.client.url, h.path, methodPath)
 
     jsonBody, err := json.Marshal(data)
     if err != nil {
@@ -134,6 +190,38 @@ func (h *EchoServiceClientHandler) Echo(ctx context.Context, data *EchoRequest) 
     }
 
     return out, nil
+}
+
+func (h *EchoServiceClientHandler) Chat(ctx context.Context) (*rrpc.ClientStream[ChatMessage, ChatReply], error) {
+
+    methodPath := "Chat"
+    url := joinURLPath(toWebSocketURL(h.client.url), h.path, methodPath)
+
+    return rrpc.DialStream[ChatMessage, ChatReply](ctx, url, rrpc.DialOptions{})
+}
+
+func (h *EchoServiceClientHandler) Collect(ctx context.Context) (*rrpc.ClientSendStream[LogLine], error) {
+
+    methodPath := "Collect"
+    url := joinURLPath(toWebSocketURL(h.client.url), h.path, methodPath)
+
+    return rrpc.DialSendStream[LogLine](ctx, url, rrpc.DialOptions{})
+}
+
+func (h *EchoServiceClientHandler) Tick(ctx context.Context) (*rrpc.ClientRecvStream[TickResponse], error) {
+
+    methodPath := "Tick"
+    url := joinURLPath(toWebSocketURL(h.client.url), h.path, methodPath)
+
+    return rrpc.DialRecvStream[TickResponse](ctx, url, rrpc.DialOptions{})
+}
+
+func (h *EchoServiceClientHandler) UploadBytes(ctx context.Context) (*rrpc.ClientRawSendStream, error) {
+
+    methodPath := "UploadBytes"
+    url := joinURLPath(toWebSocketURL(h.client.url), h.path, methodPath)
+
+    return rrpc.DialRawSendStream(ctx, url, rrpc.DialOptions{})
 }
 
 

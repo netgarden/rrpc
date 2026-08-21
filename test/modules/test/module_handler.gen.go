@@ -6,7 +6,6 @@ import (
     "fmt"
     "io"
     "net/http"
-    "net/url"
     "strconv"
 
     "github.com/netgarden/rrpc"
@@ -229,7 +228,9 @@ func (h *StaticServiceHandler) handleServeStatic(ctx *rrpc.Context) error {
 
     
     
-        ctx.Response().Header().Set("Content-Type", "application/octet-stream")
+        if ctx.Response().Header().Get("Content-Type") == "" {
+            ctx.Response().Header().Set("Content-Type", "application/octet-stream")
+        }
 
 	return nil
 }
@@ -263,7 +264,7 @@ type StaticServiceClientHandler struct {
 func (h *StaticServiceClientHandler) ServeStatic(ctx context.Context, filepath string) (*SizedReadCloser, error) {
 
     methodType := "GET"
-    methodPath := fmt.Sprintf("/%s", url.PathEscape(filepath))
+    methodPath := fmt.Sprintf("/%s", rrpc.EscapePathValue(filepath))
     url := h.client.url + "/" + h.path + "/" + methodPath
 
     r, err := h.doHttpRequest(ctx, methodType, url, "",nil)

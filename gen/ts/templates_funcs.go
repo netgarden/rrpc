@@ -15,8 +15,27 @@ func getTemplatesFuncs() template.FuncMap {
 	funcs["methodPathParams"] = methodPathParams
 	funcs["methodPathToTS"] = methodPathToTS
 	funcs["methodPathHasPathParam"] = methodPathHasPathParam
+	funcs["streamIsRaw"] = streamIsRaw
 
 	return funcs
+}
+
+// streamIsRaw reports whether a streaming method's message type (per its
+// direction) is "bytes" rather than a struct - i.e. whether the generated
+// client method should open a raw binary-frame stream instead of a typed
+// JSON-per-frame one. The validator guarantees a "both"-direction
+// method's input and output aren't a mixed struct/bytes combination, so
+// checking just the input side (or the output side for "out") is
+// sufficient.
+func streamIsRaw(method *def.Method) bool {
+	switch method.StreamDirection {
+	case "both", "in":
+		return len(method.Inputs) > 0 && method.Inputs[0].Type == "bytes"
+	case "out":
+		return len(method.Outputs) > 0 && method.Outputs[0].Type == "bytes"
+	default:
+		return false
+	}
 }
 
 // methodPathParams extracts path parameter names from a path string.

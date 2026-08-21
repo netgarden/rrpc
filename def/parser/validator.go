@@ -44,6 +44,10 @@ func (v *Validator) validateService(service *def.Service) error {
 
 func (v *Validator) validateMethod(service *def.Service, method *def.Method) error {
 
+	if method.Streaming {
+		return v.validateStreamingMethod(service, method)
+	}
+
 	var methodHasStructInput bool
 	var methodHasBytesInput bool
 	for i, inputDef := range method.Inputs {
@@ -101,6 +105,73 @@ func (v *Validator) validateMethod(service *def.Service, method *def.Method) err
 					return err
 				}
 			}
+		}
+	}
+
+	return nil
+}
+
+// validateStreamingMethod enforces the shape rules for @Stream/
+// @InputStream/@OutputStream methods: exactly the input/output count each
+// direction implies, and every declared message type is either a struct
+// (typed JSON-per-frame messages) or the "bytes" primitive (raw byte
+// stream, see rrpc.RawStream/RawInStream/RawOutStream) - no other
+// primitive maps to a meaningful per-frame encoding.
+func (v *Validator) validateStreamingMethod(service *def.Service, method *def.Method) error {
+
+	switch method.StreamDirection {
+	case "both":
+		if len(method.Inputs) != 1 || len(method.Outputs) != 1 {
+			return fmt.Errorf(
+				"method %s.%s: @Stream requires exactly one input and one output",
+				service.Name, method.Name,
+			)
+		}
+	case "in":
+		if len(method.Inputs) != 1 || len(method.Outputs) != 0 {
+			return fmt.Errorf(
+				"method %s.%s: @InputStream requires exactly one input and no output",
+				service.Name, method.Name,
+			)
+		}
+	case "out":
+		if len(method.Inputs) != 0 || len(method.Outputs) != 1 {
+			return fmt.Errorf(
+				"method %s.%s: @OutputStream requires exactly one output and no input",
+				service.Name, method.Name,
+			)
+		}
+	default:
+		return fmt.Errorf(
+			"method %s.%s: unknown stream direction %q",
+			service.Name, method.Name, method.StreamDirection,
+		)
+	}
+
+	fields := make([]*def.Field, 0, len(method.Inputs)+len(method.Outputs))
+	fields = append(fields, method.Inputs...)
+	fields = append(fields, method.Outputs...)
+	for _, field := range fields {
+		if !field.IsStruct && field.Type != "bytes" {
+			return fmt.Errorf(
+				"method %s.%s: streaming message type %s must be a struct or bytes, got %s",
+				service.Name, method.Name, field.Name, field.Type,
+			)
+		}
+	}
+
+	// A bidirectional stream is either fully typed (rrpc.Stream[In, Out])
+	// or fully raw (rrpc.RawStream) - there's no single generic type for
+	// a mixed struct-in/bytes-out combination, so reject it rather than
+	// let codegen produce something inconsistent.
+	if method.StreamDirection == "both" {
+		inIsBytes := method.Inputs[0].Type == "bytes"
+		outIsBytes := method.Outputs[0].Type == "bytes"
+		if inIsBytes != outIsBytes {
+			return fmt.Errorf(
+				"method %s.%s: @Stream's input and output must both be structs or both be bytes, not mixed",
+				service.Name, method.Name,
+			)
 		}
 	}
 

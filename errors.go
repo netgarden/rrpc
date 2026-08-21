@@ -61,6 +61,20 @@ func (e RRPCError) WithCauseString() RRPCError {
 	return e
 }
 
+// toRRPCError normalizes any error into an RRPCError: err as-is if it
+// already is one, otherwise wrapped as ErrRrpcEndpoint's cause. Shared by
+// the unary JSON-error path (sendErrorJSON) and the streaming
+// error-frame path (Stream.SendError/OutStream.SendError in
+// websocket.go) so both produce identical output for the same input
+// error.
+func toRRPCError(err error) RRPCError {
+	rpcErr, ok := err.(RRPCError)
+	if !ok {
+		rpcErr = ErrRrpcEndpoint.WithCause(err)
+	}
+	return rpcErr
+}
+
 // RRPC errors
 var (
 	ErrRrpcEndpoint           = RRPCError{Code: 0, Name: "RrpcEndpoint", Message: "endpoint error", HTTPStatus: 400}

@@ -1,4 +1,4 @@
-import { RRPCClient, RRPCResponse } from "$lib/rrpc";
+import { RRPCClient, RRPCResponse } from "rrpc-client";
 
 export class FilesClient {
 

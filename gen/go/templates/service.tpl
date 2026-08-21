@@ -1,6 +1,9 @@
 {{- define "service" }}
 type {{ firstLetterToUpper .Name }}Service interface {
     {{- range $methodKey, $method := .Methods }}
+    {{- if $method.Streaming }}
+    {{ firstLetterToUpper $method.Name }}(ctx *rrpc.Context, stream *rrpc.{{ streamGoType $method }}) error
+    {{- else }}
     {{ firstLetterToUpper $method.Name -}}
         (ctx *rrpc.Context
         {{- range $paramKey, $param := $method.Inputs -}}
@@ -13,6 +16,7 @@ type {{ firstLetterToUpper .Name }}Service interface {
     {{- else if gt (len $method.Outputs) 0 }} (
         {{- range $_, $output := $method.Outputs }}{{ if $output.IsStruct }}*{{ $output.Type }}{{ end }}, {{ end -}}
         error)
+    {{- end }}
     {{- end }}
     {{- end }}
 }

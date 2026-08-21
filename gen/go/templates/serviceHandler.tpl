@@ -41,6 +41,17 @@ func (h *{{ firstLetterToUpper $service.Name }}ServiceHandler) Methods() []rrpc.
 }
 
 {{ range $_, $method := .Methods -}}
+{{ if $method.Streaming -}}
+func (h *{{ firstLetterToUpper $service.Name }}ServiceHandler) handle{{ firstLetterToUpper $method.Name }}(ctx *rrpc.Context) error {
+    stream, err := rrpc.{{ streamUpgradeCall $method }}(ctx, rrpc.UpgradeOptions{})
+    if err != nil {
+        return err
+    }
+    defer stream.CloseGracefully()
+    return h.service.{{ firstLetterToUpper $method.Name }}(ctx, stream)
+}
+
+{{ else -}}
 func (h *{{ firstLetterToUpper $service.Name }}ServiceHandler) handle{{ firstLetterToUpper $method.Name }}(ctx *rrpc.Context) error {
     {{- $isMultipart := eq $method.ContentType "multipart/form-data" }}
 
@@ -119,6 +130,7 @@ func (h *{{ firstLetterToUpper $service.Name }}ServiceHandler) handle{{ firstLet
 	return nil
 }
 
+{{ end -}}
 {{ end }}
 
 func (h *{{ firstLetterToUpper $service.Name }}ServiceHandler) readBody(r *http.Request) ([]byte, error) {

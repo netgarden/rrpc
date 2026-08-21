@@ -21,6 +21,24 @@ type {{ firstLetterToUpper .Name }}ServiceClientHandler struct {
 }
 
 {{ range $_, $method := .Methods -}}
+{{ if $method.Streaming -}}
+{{ $pathParams := methodPathParams $method.Path -}}
+func (h *{{ firstLetterToUpper $service.Name }}ServiceClientHandler) {{ firstLetterToUpper $method.Name -}}
+        (ctx context.Context
+        {{- range $_, $p := $pathParams }}, {{ $p }} string{{ end -}}
+    ) (*rrpc.{{ streamClientGoType $method }}, error) {
+
+    {{ if eq $method.Path "" -}}
+    url := joinURLPath(toWebSocketURL(h.client.url), h.path)
+    {{- else -}}
+    methodPath := {{ methodPathToGo $method.Path }}
+    url := joinURLPath(toWebSocketURL(h.client.url), h.path, methodPath)
+    {{- end }}
+
+    return rrpc.{{ streamDialCall $method }}(ctx, url, rrpc.DialOptions{})
+}
+
+{{ else -}}
 {{ $isMultipart := eq $method.ContentType "multipart/form-data" -}}
 {{ $pathParams := methodPathParams $method.Path -}}
 func (h *{{ firstLetterToUpper $service.Name }}ServiceClientHandler) {{ firstLetterToUpper $method.Name -}}
@@ -44,10 +62,10 @@ func (h *{{ firstLetterToUpper $service.Name }}ServiceClientHandler) {{ firstLet
 
     methodType := "{{ $method.Type }}"
     {{ if eq $method.Path "" -}}
-    url := h.client.url + "/" + h.path
+    url := joinURLPath(h.client.url, h.path)
     {{- else -}}
     methodPath := {{ methodPathToGo $method.Path }}
-    url := h.client.url + "/" + h.path + "/" + methodPath
+    url := joinURLPath(h.client.url, h.path, methodPath)
     {{- end }}
 
     {{ if and (eq (len $method.Inputs) 1) (index $method.Inputs 0).IsStruct -}}
@@ -107,6 +125,7 @@ func (h *{{ firstLetterToUpper $service.Name }}ServiceClientHandler) {{ firstLet
     {{- if $output.IsStruct }}out{{ else if eq $output.Type "bytes" }}r{{ else if eq $output.Type "string" }}string(respBody){{ end }}, {{ end }}nil
 }
 
+{{ end -}}
 {{ end }}
 
 func (h *{{ firstLetterToUpper $service.Name }}ServiceClientHandler) doHttpRequest(ctx context.Context, method string, url string, contentType string, body io.Reader) (*SizedReadCloser, error) {

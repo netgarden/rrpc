@@ -133,7 +133,9 @@ func (h *FilesServiceHandler) handleDownload(ctx *rrpc.Context) error {
 
     
     
-        ctx.Response().Header().Set("Content-Type", "application/octet-stream")
+        if ctx.Response().Header().Get("Content-Type") == "" {
+            ctx.Response().Header().Set("Content-Type", "application/octet-stream")
+        }
 
 	return nil
 }

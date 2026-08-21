@@ -107,6 +107,126 @@ func methodPathHasStringParam(path string) bool {
 	}
 }
 
+// streamGoType returns the rrpc runtime server-side stream type (with
+// type parameters, if any) for a streaming method - e.g.
+// "Stream[ChatMessage, ChatReply]", "InStream[LogLine]", "RawOutStream".
+// The validator guarantees the input/output counts implied by
+// method.StreamDirection and that "both"-direction methods aren't a
+// mixed struct/bytes combination, so this doesn't re-check those.
+func streamGoType(method *def.Method) string {
+	switch method.StreamDirection {
+	case "both":
+		in, out := method.Inputs[0], method.Outputs[0]
+		if in.Type == "bytes" {
+			return "RawStream"
+		}
+		return "Stream[" + in.Type + ", " + out.Type + "]"
+	case "in":
+		in := method.Inputs[0]
+		if in.Type == "bytes" {
+			return "RawInStream"
+		}
+		return "InStream[" + in.Type + "]"
+	case "out":
+		out := method.Outputs[0]
+		if out.Type == "bytes" {
+			return "RawOutStream"
+		}
+		return "OutStream[" + out.Type + "]"
+	default:
+		panic("streamGoType: unknown stream direction " + method.StreamDirection)
+	}
+}
+
+// streamUpgradeCall returns the rrpc runtime Upgrade*/UpgradeRaw*
+// function call expression (with type arguments, if any) for a streaming
+// method - e.g. "UpgradeStream[ChatMessage, ChatReply]",
+// "UpgradeInStream[LogLine]", "UpgradeRawOutStream".
+func streamUpgradeCall(method *def.Method) string {
+	switch method.StreamDirection {
+	case "both":
+		in, out := method.Inputs[0], method.Outputs[0]
+		if in.Type == "bytes" {
+			return "UpgradeRawStream"
+		}
+		return "UpgradeStream[" + in.Type + ", " + out.Type + "]"
+	case "in":
+		in := method.Inputs[0]
+		if in.Type == "bytes" {
+			return "UpgradeRawInStream"
+		}
+		return "UpgradeInStream[" + in.Type + "]"
+	case "out":
+		out := method.Outputs[0]
+		if out.Type == "bytes" {
+			return "UpgradeRawOutStream"
+		}
+		return "UpgradeOutStream[" + out.Type + "]"
+	default:
+		panic("streamUpgradeCall: unknown stream direction " + method.StreamDirection)
+	}
+}
+
+// streamClientGoType returns the generated Go client's counterpart of
+// streamGoType - e.g. "ClientStream[ChatMessage, ChatReply]",
+// "ClientSendStream[LogLine]", "ClientRawRecvStream". Note the client's
+// "in"/"out" naming is from the CLIENT's own perspective (matching
+// rrpc.ClientSendStream/ClientRecvStream's doc comments): an
+// "@InputStream" method still means "client sends", so it maps to
+// ClientSendStream, not ClientInStream.
+func streamClientGoType(method *def.Method) string {
+	switch method.StreamDirection {
+	case "both":
+		in, out := method.Inputs[0], method.Outputs[0]
+		if in.Type == "bytes" {
+			return "ClientRawStream"
+		}
+		return "ClientStream[" + in.Type + ", " + out.Type + "]"
+	case "in":
+		in := method.Inputs[0]
+		if in.Type == "bytes" {
+			return "ClientRawSendStream"
+		}
+		return "ClientSendStream[" + in.Type + "]"
+	case "out":
+		out := method.Outputs[0]
+		if out.Type == "bytes" {
+			return "ClientRawRecvStream"
+		}
+		return "ClientRecvStream[" + out.Type + "]"
+	default:
+		panic("streamClientGoType: unknown stream direction " + method.StreamDirection)
+	}
+}
+
+// streamDialCall returns the rrpc runtime Dial*/DialRaw* function call
+// expression (with type arguments, if any) for a streaming method - the
+// dialing counterpart of streamUpgradeCall.
+func streamDialCall(method *def.Method) string {
+	switch method.StreamDirection {
+	case "both":
+		in, out := method.Inputs[0], method.Outputs[0]
+		if in.Type == "bytes" {
+			return "DialRawStream"
+		}
+		return "DialStream[" + in.Type + ", " + out.Type + "]"
+	case "in":
+		in := method.Inputs[0]
+		if in.Type == "bytes" {
+			return "DialRawSendStream"
+		}
+		return "DialSendStream[" + in.Type + "]"
+	case "out":
+		out := method.Outputs[0]
+		if out.Type == "bytes" {
+			return "DialRawRecvStream"
+		}
+		return "DialRecvStream[" + out.Type + "]"
+	default:
+		panic("streamDialCall: unknown stream direction " + method.StreamDirection)
+	}
+}
+
 func createFieldDefaultValue(field def.Field) string {
 	if field.IsStruct {
 		return createStructFieldDefaultValue(field)

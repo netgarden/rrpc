@@ -27,6 +27,10 @@ func (g *Generator) Generate(definition *def.Module, targetDir string) error {
 	tplFuncs["methodPathParams"] = methodPathParams
 	tplFuncs["methodPathToGo"] = methodPathToGo
 	tplFuncs["methodPathHasStringParam"] = methodPathHasStringParam
+	tplFuncs["streamGoType"] = streamGoType
+	tplFuncs["streamUpgradeCall"] = streamUpgradeCall
+	tplFuncs["streamClientGoType"] = streamClientGoType
+	tplFuncs["streamDialCall"] = streamDialCall
 
 	baseTpl, err := template.New("").Funcs(tplFuncs).ParseFS(g.fs, "*.tpl")
 	if err != nil {

@@ -13,6 +13,40 @@ class {{ firstLetterToUpper .Name }}ServiceHandler {
 
     {{- range $_, $method := .Methods }}
 
+    {{- if $method.Streaming }}
+
+      {{- $pathParams := methodPathParams $method.Path }}
+
+    async {{ firstLetterToLower $method.Name }}(
+    {{- range $i, $p := $pathParams }}{{ if $i }}, {{ end }}{{ $p }}: string{{ end -}}
+    ) : Promise<
+    {{- if eq $method.StreamDirection "both" -}}
+    RRPCStream<{{ rrpcDataTypeToTSType (index $method.Inputs 0).Type }}, {{ rrpcDataTypeToTSType (index $method.Outputs 0).Type }}>
+    {{- else if eq $method.StreamDirection "in" -}}
+    RRPCInStream<{{ rrpcDataTypeToTSType (index $method.Inputs 0).Type }}>
+    {{- else -}}
+    RRPCOutStream<{{ rrpcDataTypeToTSType (index $method.Outputs 0).Type }}>
+    {{- end -}}
+    > {
+
+        {{ if eq $method.Path "" -}}
+        const uri = ('/' + this._path).replace(/\/+/g, '/');
+        {{- else -}}
+        const methodPath = {{ methodPathToTS $method.Path }};
+        const uri = ('/' + this._path + '/' + methodPath).replace(/\/+/g, '/');
+        {{- end }}
+
+        {{ if eq $method.StreamDirection "both" -}}
+        return this._client.openStream<{{ rrpcDataTypeToTSType (index $method.Inputs 0).Type }}, {{ rrpcDataTypeToTSType (index $method.Outputs 0).Type }}>(uri{{ if streamIsRaw $method }}, true{{ end }});
+        {{- else if eq $method.StreamDirection "in" -}}
+        return this._client.openInStream<{{ rrpcDataTypeToTSType (index $method.Inputs 0).Type }}>(uri{{ if streamIsRaw $method }}, true{{ end }});
+        {{- else -}}
+        return this._client.openOutStream<{{ rrpcDataTypeToTSType (index $method.Outputs 0).Type }}>(uri{{ if streamIsRaw $method }}, true{{ end }});
+        {{- end }}
+    }
+
+    {{- else }}
+
       {{- $getWithStruct := false -}}
       {{- if eq $method.Type "GET" -}}
         {{- if and (eq (len $method.Inputs) 1) ((index $method.Inputs 0).IsStruct) -}}
@@ -130,6 +164,8 @@ class {{ firstLetterToUpper .Name }}ServiceHandler {
         {{ end -}}
         ;
     }
+
+    {{- end }}
 
     {{- end }}
 

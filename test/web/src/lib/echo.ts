@@ -1,4 +1,4 @@
-import { RRPCClient, RRPCResponse } from "$lib/rrpc";
+import { RRPCClient, RRPCResponse, RRPCStream, RRPCInStream, RRPCOutStream } from "$lib/rrpc";
 
 export class EchoClient {
 
@@ -42,6 +42,15 @@ class EchoServiceHandler {
             if (value === null || value === undefined) continue;
             if (value instanceof Uint8Array) {
                 queryParams.set(key, btoa(String.fromCharCode(...value)));
+            } else if (typeof value === 'object') {
+                // A map-typed field (e.g. DatatableRequest.filters) — browsers
+                // have no native nested-query-param representation, so encode
+                // each entry as bracket notation ("key[subkey]=value"); the
+                // server's DecodeQueryParams regroups these before unmarshaling.
+                for (const [subkey, subvalue] of Object.entries(value as Record<string, unknown>)) {
+                    if (subvalue === null || subvalue === undefined) continue;
+                    queryParams.set(`${key}[${subkey}]`, String(subvalue));
+                }
             } else {
                 queryParams.set(key, String(value));
             }
@@ -55,6 +64,47 @@ class EchoServiceHandler {
         return ret;
     }
 
+    async chat() : Promise<RRPCStream<ChatMessage, ChatReply>> {
+
+        const methodPath = "Chat";
+        const uri = ('/' + this._path + '/' + methodPath).replace(/\/+/g, '/');
+
+        return this._client.openStream<ChatMessage, ChatReply>(uri);
+    }
+
+    async collect() : Promise<RRPCInStream<LogLine>> {
+
+        const methodPath = "Collect";
+        const uri = ('/' + this._path + '/' + methodPath).replace(/\/+/g, '/');
+
+        return this._client.openInStream<LogLine>(uri);
+    }
+
+    async tick() : Promise<RRPCOutStream<TickResponse>> {
+
+        const methodPath = "Tick";
+        const uri = ('/' + this._path + '/' + methodPath).replace(/\/+/g, '/');
+
+        return this._client.openOutStream<TickResponse>(uri);
+    }
+
+    async uploadBytes() : Promise<RRPCInStream<Uint8Array>> {
+
+        const methodPath = "UploadBytes";
+        const uri = ('/' + this._path + '/' + methodPath).replace(/\/+/g, '/');
+
+        return this._client.openInStream<Uint8Array>(uri, true);
+    }
+
+}
+
+class ChatMessage {
+    text!: string;
+}
+
+class ChatReply {
+    from!: string;
+    text!: string;
 }
 
 class EchoRequest {
@@ -65,4 +115,12 @@ class EchoRequest {
 
 class EchoResponse {
     result!: string;
+}
+
+class LogLine {
+    line!: string;
+}
+
+class TickResponse {
+    n!: number;
 }

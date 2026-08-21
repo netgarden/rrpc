@@ -94,36 +94,36 @@ func (s *Server) RegisterModule(module ServerModule) error {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	defer s.recoverPanic(w, r)
-	s.coreHandle(w, r)
+	// rrpcCtx is filled in by coreHandle and read by recoverPanic's defer
+	// - a *Context pointer so a panic occurring after a successful
+	// WebSocket upgrade (Context.Hijacked() == true) is still known about
+	// by the deferred recover, which must not attempt to write a JSON
+	// error body to a connection that's no longer a normal ResponseWriter.
+	var rrpcCtx *Context
+	defer s.recoverPanic(w, r, &rrpcCtx)
+	rrpcCtx = s.coreHandle(w, r)
 }
 
-func (s *Server) coreHandle(w http.ResponseWriter, r *http.Request) {
+func (s *Server) coreHandle(w http.ResponseWriter, r *http.Request) *Context {
 	ctx := r.Context()
 
 	if s.onRequest != nil {
 		if err := s.onRequest(w, r); err != nil {
-			rpcErr, ok := err.(RRPCError)
-			if !ok {
-				rpcErr = ErrRrpcEndpoint.WithCause(err)
-			}
-			s.sendErrorJSON(w, r, rpcErr)
-			return
+			s.sendErrorJSON(w, r, toRRPCError(err))
+			return nil
 		}
 	}
 
-	err := s.handle(ctx, w, r)
+	rrpcCtx, err := s.handle(ctx, w, r)
 
-	if err != nil {
-		rpcErr, ok := err.(RRPCError)
-		if !ok {
-			rpcErr = ErrRrpcEndpoint.WithCause(err)
-		}
-		s.sendErrorJSON(w, r, rpcErr)
+	if err != nil && (rrpcCtx == nil || !rrpcCtx.Hijacked()) {
+		s.sendErrorJSON(w, r, toRRPCError(err))
 	}
+
+	return rrpcCtx
 }
 
-func (s *Server) handle(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+func (s *Server) handle(ctx context.Context, w http.ResponseWriter, r *http.Request) (*Context, error) {
 
 	requestMethod := r.Method
 	requestUri := r.URL.Path
@@ -149,7 +149,7 @@ func (s *Server) handle(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	}
 
 	if matched == nil {
-		return ErrRrpcBadRoute.WithCausef("no rrpc method defined for path %v", r.URL.Path)
+		return nil, ErrRrpcBadRoute.WithCausef("no rrpc method defined for path %v", r.URL.Path)
 	}
 
 	params := NewParams()
@@ -167,7 +167,7 @@ func (s *Server) handle(ctx context.Context, w http.ResponseWriter, r *http.Requ
 
 			paramStrValue := submatch[i]
 			if err := processParam(params, param, paramStrValue); err != nil {
-				return err
+				return nil, err
 			}
 		}
 	}
@@ -199,17 +199,21 @@ func (s *Server) handle(ctx context.Context, w http.ResponseWriter, r *http.Requ
 		}
 	}
 
-	return handler(rrpcCtx)
+	return rrpcCtx, handler(rrpcCtx)
 }
 
 func (s *Server) createContext(ctx context.Context, w http.ResponseWriter, r *http.Request, params *Params) *Context {
 	return NewContext(r, w, params)
 }
 
-func (s *Server) recoverPanic(w http.ResponseWriter, r *http.Request) {
-	// In case of a panic, serve a HTTP 500 error and then panic.
+func (s *Server) recoverPanic(w http.ResponseWriter, r *http.Request, rrpcCtx **Context) {
+	// In case of a panic, serve a HTTP 500 error and then panic - unless
+	// the connection was already hijacked by a WebSocket upgrade, in
+	// which case there's no ResponseWriter left to write to.
 	if rr := recover(); rr != nil {
-		s.sendErrorJSON(w, r, ErrRrpcServerPanic.WithCausef("%v", rr))
+		if *rrpcCtx == nil || !(*rrpcCtx).Hijacked() {
+			s.sendErrorJSON(w, r, ErrRrpcServerPanic.WithCausef("%v", rr))
+		}
 		panic(rr)
 	}
 }
