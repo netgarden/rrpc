@@ -57,7 +57,10 @@ func (l *Lexer) Scan() *Item {
 			panic(err)
 		}
 
-		if unicode.IsSpace(r) {
+		if unicode.IsSpace(r) || r == '#' {
+			// A '#' comment runs to the end of the line and is absorbed into the
+			// surrounding whitespace run (see readWhiteSpace), so a commented
+			// line tokenizes exactly like the same line without the comment.
 			l.backup()
 			return l.readWhiteSpace()
 		} else if r == '"' {
@@ -87,6 +90,14 @@ func (l *Lexer) Scan() *Item {
 			l.backup()
 			lit := l.readIdent()
 
+			if lit == "" {
+				// A character that can't start any token. Consume it and
+				// report it, instead of returning an empty IDENT without
+				// advancing (which crashes the parser and can loop forever).
+				bad, _, _ := l.reader.Read()
+				return newItem(startPos, ILLEGAL, string(bad))
+			}
+
 			switch lit {
 			case "include":
 				return newItem(startPos, INCLUDE, lit)
@@ -108,6 +119,20 @@ func (l *Lexer) Scan() *Item {
 		}
 	}
 
+}
+
+// skipLine consumes input up to, but not including, the next newline (or EOF).
+func (l *Lexer) skipLine() {
+	for {
+		r, _, err := l.reader.Read()
+		if err != nil {
+			return
+		}
+		if r == '\n' {
+			l.backup()
+			return
+		}
+	}
 }
 
 func (l *Lexer) backup() {
@@ -137,6 +162,11 @@ func (l *Lexer) readWhiteSpace() *Item {
 			}
 		}
 
+		if r == '#' {
+			l.skipLine() // the newline ending the comment is read next, as whitespace
+			continue
+		}
+
 		if unicode.IsSpace(r) {
 			if r == '\n' && token != NEWLINE {
 				token = NEWLINE
@@ -152,6 +182,9 @@ func (l *Lexer) readWhiteSpace() *Item {
 
 	}
 
+	if token == -1 { // a comment with nothing but EOF around it
+		token = WHITESPACE
+	}
 	return newItem(*startPos, token, lit)
 }
 

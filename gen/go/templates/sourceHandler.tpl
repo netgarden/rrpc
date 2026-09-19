@@ -8,7 +8,8 @@
         {{- if gt (len (methodPathParams $method.Path)) 0 -}}{{- $needsPathParams = true -}}{{- end -}}
         {{- if methodPathHasStringParam $method.Path -}}{{- $needsUrlEscape = true -}}{{- end -}}
         {{- range $fieldKey, $input := $method.Inputs -}}
-            {{- if $input.IsStruct -}}{{- $needsBytes = true -}}{{- end -}}
+            {{- /* Streaming methods send their struct over a WebSocket, never via bytes.NewBuffer. */ -}}
+            {{- if and $input.IsStruct (not $method.Streaming) -}}{{- $needsBytes = true -}}{{- end -}}
         {{- end -}}
     {{- end -}}
 {{- end -}}

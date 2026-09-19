@@ -68,3 +68,45 @@ func mustWrite(t *testing.T, path, content string) {
 		t.Fatalf("failed to write %s: %v", path, err)
 	}
 }
+
+func parseModule(t *testing.T, body string) error {
+	t.Helper()
+	dir := t.TempDir()
+	mustWrite(t, filepath.Join(dir, "module.rrpc"), "name = \"test\"\nversion = \"0.0.1\"\noption go_package = \"test\"\n\n"+body)
+	_, err := New().Parse(filepath.Join(dir, "module.rrpc"))
+	return err
+}
+
+func TestParse_Comments(t *testing.T) {
+	err := parseModule(t, `
+# leading comment
+struct A {
+    # own-line comment inside a struct
+    id   string # trailing comment
+    name string
+}
+
+# comment before a service
+@Path("/a")
+service S {
+    # comment inside a service
+    @method("POST")
+    get(request A) (A)
+}
+`)
+	if err != nil {
+		t.Fatalf("comments should be ignored, got: %v", err)
+	}
+}
+
+// Unsupported syntax must give an error, not crash the parser.
+func TestParse_UnsupportedCharacterIsAnErrorNotAPanic(t *testing.T) {
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("parser panicked: %v", r)
+		}
+	}()
+	if err := parseModule(t, "struct A {\n    tag? string\n}\n"); err == nil {
+		t.Fatal("expected an error for '?' in a field name")
+	}
+}

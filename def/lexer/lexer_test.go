@@ -14,11 +14,11 @@ func Test(t *testing.T) {
 
 	lexer := New(file)
 	for {
-		pos, tok, lit := lexer.Scan()
-		if tok == EOF {
+		it := lexer.Scan()
+		if it.Token == EOF {
 			break
 		}
 
-		fmt.Printf("%d:%d\t%s\t%s\n", pos.Line, pos.Column, tok, lit)
+		fmt.Printf("%d:%d\t%s\t%s\n", it.Position.Line, it.Position.Column, it.Token, it.Literal)
 	}
 }

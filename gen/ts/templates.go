@@ -16,5 +16,11 @@ func getTemplatesFS() fs.FS {
 		return os.DirFS("./ts/templates")
 	}
 
-	return templates
+	// The embed root contains the "templates" directory itself; the
+	// generators glob "*.tpl" at the FS root, so hand them the subtree.
+	sub, err := fs.Sub(templates, "templates")
+	if err != nil {
+		panic(err) // the //go:embed pattern above guarantees the directory exists
+	}
+	return sub
 }
