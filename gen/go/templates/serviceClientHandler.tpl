@@ -68,7 +68,16 @@ func (h *{{ firstLetterToUpper $service.Name }}ServiceClientHandler) {{ firstLet
     url := joinURLPath(h.client.url, h.path, methodPath)
     {{- end }}
 
-    {{ if and (eq (len $method.Inputs) 1) (index $method.Inputs 0).IsStruct -}}
+    {{ if and (eq $method.Type "GET") (eq (len $method.Inputs) 1) (index $method.Inputs 0).IsStruct -}}
+    {{- /* A GET's request struct travels in the query string - what the server's DecodeQueryParams and the TS client both use - never in a body. */ -}}
+    query, err := rrpc.EncodeQueryParams(data)
+    if err != nil {
+        return {{ range $_, $_ := $method.Outputs }}{{ if (index $method.Outputs 0).IsStruct }}nil{{ else if eq (index $method.Outputs 0).Type "string" }}""{{ else }}nil{{ end }}, {{ end }}rrpc.ErrRrpcBadRequest.WithCausef("failed to encode query params: %w", err)
+    }
+    if len(query) > 0 {
+        url += "?" + query.Encode()
+    }
+    {{ else if and (eq (len $method.Inputs) 1) (index $method.Inputs 0).IsStruct -}}
     jsonBody, err := json.Marshal(data)
     if err != nil {
         return {{ range $_, $_ := $method.Outputs }}{{ if (index $method.Outputs 0).IsStruct }}nil{{ else if eq (index $method.Outputs 0).Type "string" }}""{{ else }}nil{{ end }}, {{ end }}rrpc.ErrRrpcBadRequest.WithCausef("failed to marshal request: %w", err)
@@ -84,7 +93,9 @@ func (h *{{ firstLetterToUpper $service.Name }}ServiceClientHandler) {{ firstLet
     )
     {{- else }} h.doHttpRequest(ctx, methodType, url, "{{ $method.ContentType }}",
         {{- if eq (len $method.Inputs) 1 }}
-            {{- if (index $method.Inputs 0).IsStruct -}}
+            {{- if and (eq $method.Type "GET") (index $method.Inputs 0).IsStruct -}}
+                nil
+            {{- else if (index $method.Inputs 0).IsStruct -}}
                 bytes.NewBuffer(jsonBody)
             {{- else if eq (index $method.Inputs 0).Type "bytes" -}}
                 r0

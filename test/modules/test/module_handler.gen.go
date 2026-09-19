@@ -98,7 +98,7 @@ func (h *PingerServiceClientHandler) Ping(ctx context.Context)error {
 
     methodType := "GET"
     methodPath := "Ping"
-    url := h.client.url + "/" + h.path + "/" + methodPath
+    url := joinURLPath(h.client.url, h.path, methodPath)
 
     _, err := h.doHttpRequest(ctx, methodType, url, "",nil)
     if err != nil {
@@ -265,7 +265,7 @@ func (h *StaticServiceClientHandler) ServeStatic(ctx context.Context, filepath s
 
     methodType := "GET"
     methodPath := fmt.Sprintf("/%s", rrpc.EscapePathValue(filepath))
-    url := h.client.url + "/" + h.path + "/" + methodPath
+    url := joinURLPath(h.client.url, h.path, methodPath)
 
     r, err := h.doHttpRequest(ctx, methodType, url, "",nil)
     if err != nil {

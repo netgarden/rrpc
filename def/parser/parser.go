@@ -329,6 +329,14 @@ func (p *Parser) parseStruct(lex *lexer.Reader, source *def.SourceOrigin) error 
 			}
 		}
 
+		// Field annotations (@optional) may sit on the same line as the
+		// field or on the lines above it.
+		p.skipLexItem(lex, lexer.WHITESPACE, lexer.NEWLINE)
+		fieldAnnotations, err := p.readAnnotations(lex)
+		if err != nil {
+			return err
+		}
+
 		var field *def.Field
 
 		field, err = p.parseField(lex, true)
@@ -338,6 +346,10 @@ func (p *Parser) parseStruct(lex *lexer.Reader, source *def.SourceOrigin) error 
 
 		if field == nil {
 			break
+		}
+
+		if err = applyFieldAnnotations(field, fieldAnnotations); err != nil {
+			return err
 		}
 
 		if slices.Contains(fieldNames, field.Name) {
@@ -351,6 +363,27 @@ func (p *Parser) parseStruct(lex *lexer.Reader, source *def.SourceOrigin) error 
 
 	source.Structs = append(source.Structs, structDef)
 
+	return nil
+}
+
+// applyFieldAnnotations sets field flags from its annotations. Unknown
+// annotations are rejected rather than silently ignored, so a typo such as
+// "@optonal" can't quietly turn into a required field.
+func applyFieldAnnotations(field *def.Field, annotations []*def.Annotation) error {
+	for _, a := range annotations {
+		switch a.Name {
+		case "optional":
+			if a.Value != "" {
+				return fmt.Errorf("field '%s': @optional takes no arguments", field.Name)
+			}
+			if field.Optional {
+				return fmt.Errorf("field '%s': @optional given more than once", field.Name)
+			}
+			field.Optional = true
+		default:
+			return fmt.Errorf("field '%s': unknown field annotation @%s (supported: @optional)", field.Name, a.Name)
+		}
+	}
 	return nil
 }
 

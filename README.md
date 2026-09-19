@@ -37,7 +37,7 @@ include "common.rrpc"
 
 ### Structs
 
-Structs define the input and output shapes of methods. Fields are typed; arrays and optional modifiers are supported.
+Structs define the input and output shapes of methods. Fields are typed; arrays (`[]T`), maps and optional fields are supported. `#` starts a comment that runs to the end of the line.
 
 ```
 struct LoginRequest {
@@ -53,9 +53,18 @@ struct SearchResult {
 
 struct Config {
     timeout  int
-    tag?     string      # optional field
+    @optional tag string      # optional field
 }
 ```
+
+**Optional fields.** Annotate a field with `@optional` (on the same line, or on the line above) to let it be absent on the wire. Any other field annotation is an error.
+
+| | required | `@optional` |
+|---|---|---|
+| Go scalar / struct | `T` | `*T` with `omitempty` (nil = unset, so `""`/`0`/`false` can be sent explicitly) |
+| Go slice / map | `[]T` / `map[K]V` | unchanged type, with `omitempty` (nil = unset) |
+| TypeScript | `name!: T` | `name?: T` |
+| GET query param | required | absent key leaves the field unset |
 
 **Primitive types**
 
@@ -386,7 +395,15 @@ The HTTP status code is set from the error's `http_code` (module errors) or the 
 | Single struct           | POST / PUT   | JSON body (`application/json`) |
 | Single `bytes`          | POST / PUT   | Raw binary body (`application/octet-stream`) |
 | Struct + `bytes`        | POST / PUT   | Multipart form data (`multipart/form-data`); struct as named JSON field, bytes as file field |
-| Single struct           | GET / HEAD / DELETE | URL query parameters; all struct fields must be primitive types |
+| Single struct           | GET          | URL query parameters (see below) |
+| Single struct           | HEAD / DELETE | JSON body, like POST — but the validator still requires primitive fields, as if they were query parameters |
+
+**GET query parameters.** The Go client (`rrpc.EncodeQueryParams`) and the TS client encode the request struct into the query string; the server decodes it with `rrpc.DecodeQueryParams`. Both use the struct's JSON names:
+
+- Each value is read according to its *field's type*, not its text: a `string` field receives `2024`, `true` or `007` verbatim; a `bool` accepts `true`/`false`/`1`/`0`; numbers must parse as numbers. A value that doesn't fit its field is a 400.
+- Unset `@optional` fields and `omitempty` zero values are left out of the query.
+- A `map[string]V` field uses one level of bracket notation: `filters[name]=foo`.
+- Slices and deeper nesting have no query-string form (the validator rejects them for GET methods; `EncodeQueryParams` returns an error).
 
 ---
 

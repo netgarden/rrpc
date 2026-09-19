@@ -9,7 +9,8 @@
         {{- if methodPathHasStringParam $method.Path -}}{{- $needsUrlEscape = true -}}{{- end -}}
         {{- range $fieldKey, $input := $method.Inputs -}}
             {{- /* Streaming methods send their struct over a WebSocket, never via bytes.NewBuffer. */ -}}
-            {{- if and $input.IsStruct (not $method.Streaming) -}}{{- $needsBytes = true -}}{{- end -}}
+            {{- /* A GET's struct goes in the query string, so it needs no bytes.NewBuffer either. */ -}}
+            {{- if and $input.IsStruct (not $method.Streaming) (ne $method.Type "GET") -}}{{- $needsBytes = true -}}{{- end -}}
         {{- end -}}
     {{- end -}}
 {{- end -}}

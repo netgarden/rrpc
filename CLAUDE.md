@@ -74,7 +74,7 @@ service MyService {
 }
 ```
 
-Supported primitive types: `string`, `int`, `float`, `bool`, `bytes`. Fields can be optional with `?` suffix or arrays with `[]` prefix.
+Supported primitive types: `string`, `int`, `float`, `bool`, `bytes`. Fields can be optional with the `@optional` annotation (Go pointer / TS `?:`, see README) or arrays with `[]` prefix. `#` starts a line comment.
 
 ## Architecture: How Code Generation Works
 

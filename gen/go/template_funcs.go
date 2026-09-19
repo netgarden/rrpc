@@ -292,3 +292,22 @@ func createPrimitiveFieldDefaultValue(field def.Field) string {
 
 	panic("Unknown primitive field type " + field.Type)
 }
+
+// goFieldType is the Go type of a struct field. An optional scalar or struct
+// becomes a pointer, so "unset" (nil) is distinguishable from the zero value.
+// Slices and maps are already nil-able, so they stay as they are.
+func goFieldType(field def.Field) string {
+	if field.Optional && !strings.HasPrefix(field.Type, "[]") && !strings.HasPrefix(field.Type, "map[") {
+		return "*" + field.Type
+	}
+	return field.Type
+}
+
+// goJSONTag is the struct tag body for a field; optional fields are omitted
+// from the JSON when unset.
+func goJSONTag(field def.Field) string {
+	if field.Optional {
+		return "json:\"" + field.Name + ",omitempty\""
+	}
+	return "json:\"" + field.Name + "\""
+}

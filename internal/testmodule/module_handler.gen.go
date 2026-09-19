@@ -119,7 +119,7 @@ func (h *ComputeServiceClientHandler) Sum(ctx context.Context, data *SumRequest)
 
     methodType := "POST"
     methodPath := "/sum"
-    url := h.client.url + "/" + h.path + "/" + methodPath
+    url := joinURLPath(h.client.url, h.path, methodPath)
 
     jsonBody, err := json.Marshal(data)
     if err != nil {
@@ -308,13 +308,16 @@ func (h *EchoServiceClientHandler) Echo(ctx context.Context, data *EchoRequest) 
 
     methodType := "GET"
     methodPath := "/echo"
-    url := h.client.url + "/" + h.path + "/" + methodPath
+    url := joinURLPath(h.client.url, h.path, methodPath)
 
-    jsonBody, err := json.Marshal(data)
+    query, err := rrpc.EncodeQueryParams(data)
     if err != nil {
-        return nil, rrpc.ErrRrpcBadRequest.WithCausef("failed to marshal request: %w", err)
+        return nil, rrpc.ErrRrpcBadRequest.WithCausef("failed to encode query params: %w", err)
     }
-    r, err := h.doHttpRequest(ctx, methodType, url, "application/json",bytes.NewBuffer(jsonBody))
+    if len(query) > 0 {
+        url += "?" + query.Encode()
+    }
+    r, err := h.doHttpRequest(ctx, methodType, url, "application/json",nil)
     if err != nil {
         return nil, err
     }
@@ -543,7 +546,7 @@ func (h *PingServiceClientHandler) Ping(ctx context.Context)error {
 
     methodType := "GET"
     methodPath := "/ping"
-    url := h.client.url + "/" + h.path + "/" + methodPath
+    url := joinURLPath(h.client.url, h.path, methodPath)
 
     _, err := h.doHttpRequest(ctx, methodType, url, "",nil)
     if err != nil {
@@ -557,7 +560,7 @@ func (h *PingServiceClientHandler) Greet(ctx context.Context, name string) (*Gre
 
     methodType := "GET"
     methodPath := fmt.Sprintf("/greet/%s", url.PathEscape(name))
-    url := h.client.url + "/" + h.path + "/" + methodPath
+    url := joinURLPath(h.client.url, h.path, methodPath)
 
     r, err := h.doHttpRequest(ctx, methodType, url, "",nil)
     if err != nil {
@@ -581,7 +584,7 @@ func (h *PingServiceClientHandler) Fail(ctx context.Context)error {
 
     methodType := "GET"
     methodPath := "/fail"
-    url := h.client.url + "/" + h.path + "/" + methodPath
+    url := joinURLPath(h.client.url, h.path, methodPath)
 
     _, err := h.doHttpRequest(ctx, methodType, url, "",nil)
     if err != nil {
@@ -811,7 +814,7 @@ func (h *StoreServiceClientHandler) Upload(ctx context.Context, r0 io.Reader)err
 
     methodType := "PUT"
     methodPath := "/upload"
-    url := h.client.url + "/" + h.path + "/" + methodPath
+    url := joinURLPath(h.client.url, h.path, methodPath)
 
     _, err := h.doHttpRequest(ctx, methodType, url, "application/octet-stream",r0)
     if err != nil {
@@ -825,7 +828,7 @@ func (h *StoreServiceClientHandler) Upload2(ctx context.Context, data *UploadInf
 
     methodType := "POST"
     methodPath := "/upload2"
-    url := h.client.url + "/" + h.path + "/" + methodPath
+    url := joinURLPath(h.client.url, h.path, methodPath)
 
     _, err := h.doMultipartRequest(ctx, methodType, url, "info", data, "data", r0)
     if err != nil {
@@ -839,7 +842,7 @@ func (h *StoreServiceClientHandler) Download(ctx context.Context) (*SizedReadClo
 
     methodType := "GET"
     methodPath := "/download"
-    url := h.client.url + "/" + h.path + "/" + methodPath
+    url := joinURLPath(h.client.url, h.path, methodPath)
 
     r, err := h.doHttpRequest(ctx, methodType, url, "",nil)
     if err != nil {

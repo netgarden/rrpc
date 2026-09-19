@@ -59,6 +59,10 @@ func (g *Generator) Generate(module *def.Module, targetDir string) error {
 
 	mainTpl := baseTpl.Lookup("main.tpl")
 
+	if err := os.MkdirAll(targetDir, os.ModePerm); err != nil {
+		return err
+	}
+
 	f, err := os.Create(filepath.Join(targetDir, module.Name+".ts"))
 	if err != nil {
 		return err

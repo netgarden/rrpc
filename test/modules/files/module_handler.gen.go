@@ -170,7 +170,7 @@ func (h *FilesServiceClientHandler) Upload(ctx context.Context, filename string,
 
     methodType := "PUT"
     methodPath := fmt.Sprintf("/upload/%s", url.PathEscape(filename))
-    url := h.client.url + "/" + h.path + "/" + methodPath
+    url := joinURLPath(h.client.url, h.path, methodPath)
 
     _, err := h.doHttpRequest(ctx, methodType, url, "application/octet-stream",r0)
     if err != nil {
@@ -184,7 +184,7 @@ func (h *FilesServiceClientHandler) Upload2(ctx context.Context, data *UploadDat
 
     methodType := "POST"
     methodPath := "/upload2"
-    url := h.client.url + "/" + h.path + "/" + methodPath
+    url := joinURLPath(h.client.url, h.path, methodPath)
 
     _, err := h.doMultipartRequest(ctx, methodType, url, "info", data, "data", r0)
     if err != nil {
@@ -198,7 +198,7 @@ func (h *FilesServiceClientHandler) Download(ctx context.Context, filename strin
 
     methodType := "GET"
     methodPath := fmt.Sprintf("/download/%s", url.PathEscape(filename))
-    url := h.client.url + "/" + h.path + "/" + methodPath
+    url := joinURLPath(h.client.url, h.path, methodPath)
 
     r, err := h.doHttpRequest(ctx, methodType, url, "",nil)
     if err != nil {

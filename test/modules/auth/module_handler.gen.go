@@ -141,7 +141,7 @@ func (h *AuthServiceClientHandler) Login(ctx context.Context, data *LoginRequest
 
     methodType := "POST"
     methodPath := "login"
-    url := h.client.url + "/" + h.path + "/" + methodPath
+    url := joinURLPath(h.client.url, h.path, methodPath)
 
     jsonBody, err := json.Marshal(data)
     if err != nil {
@@ -169,7 +169,7 @@ func (h *AuthServiceClientHandler) Logout(ctx context.Context)error {
 
     methodType := "POST"
     methodPath := "logout"
-    url := h.client.url + "/" + h.path + "/" + methodPath
+    url := joinURLPath(h.client.url, h.path, methodPath)
 
     _, err := h.doHttpRequest(ctx, methodType, url, "",nil)
     if err != nil {

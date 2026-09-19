@@ -1,7 +1,6 @@
 package echo
 
 import (
-    "bytes"
     "context"
     "encoding/json"
     "io"
@@ -111,6 +110,7 @@ func (h *EchoServiceHandler) handleChat(ctx *rrpc.Context) error {
     if err != nil {
         return err
     }
+    defer stream.CloseGracefully()
     return h.service.Chat(ctx, stream)
 }
 
@@ -119,6 +119,7 @@ func (h *EchoServiceHandler) handleCollect(ctx *rrpc.Context) error {
     if err != nil {
         return err
     }
+    defer stream.CloseGracefully()
     return h.service.Collect(ctx, stream)
 }
 
@@ -127,6 +128,7 @@ func (h *EchoServiceHandler) handleTick(ctx *rrpc.Context) error {
     if err != nil {
         return err
     }
+    defer stream.CloseGracefully()
     return h.service.Tick(ctx, stream)
 }
 
@@ -135,6 +137,7 @@ func (h *EchoServiceHandler) handleUploadBytes(ctx *rrpc.Context) error {
     if err != nil {
         return err
     }
+    defer stream.CloseGracefully()
     return h.service.UploadBytes(ctx, stream)
 }
 
@@ -170,11 +173,14 @@ func (h *EchoServiceClientHandler) Echo(ctx context.Context, data *EchoRequest) 
     methodPath := "Echo"
     url := joinURLPath(h.client.url, h.path, methodPath)
 
-    jsonBody, err := json.Marshal(data)
+    query, err := rrpc.EncodeQueryParams(data)
     if err != nil {
-        return nil, rrpc.ErrRrpcBadRequest.WithCausef("failed to marshal request: %w", err)
+        return nil, rrpc.ErrRrpcBadRequest.WithCausef("failed to encode query params: %w", err)
     }
-    r, err := h.doHttpRequest(ctx, methodType, url, "application/json",bytes.NewBuffer(jsonBody))
+    if len(query) > 0 {
+        url += "?" + query.Encode()
+    }
+    r, err := h.doHttpRequest(ctx, methodType, url, "application/json",nil)
     if err != nil {
         return nil, err
     }

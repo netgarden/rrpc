@@ -49,6 +49,31 @@ func toWebSocketURL(httpURL string) string {
     return httpURL
 }
 
+// joinURLPath joins base with path segments, collapsing any run of "/"
+// the joined path portion picks up along the way (e.g. a service's own
+// Path already starting with "/" plus the "/" a generated client method
+// inserts between segments) down to one - the scheme separator ("://")
+// is left untouched. Mirrors the TS generator's equivalent
+// .replace(/\/+/g, '/') normalization of its built URI.
+func joinURLPath(base string, segments ...string) string {
+    joined := base
+    for _, s := range segments {
+        joined += "/" + s
+    }
+    schemeEnd := strings.Index(joined, "://")
+    if schemeEnd == -1 {
+        return collapseSlashes(joined)
+    }
+    return joined[:schemeEnd+3] + collapseSlashes(joined[schemeEnd+3:])
+}
+
+func collapseSlashes(s string) string {
+    for strings.Contains(s, "//") {
+        s = strings.ReplaceAll(s, "//", "/")
+    }
+    return s
+}
+
 func NewSizedReader(r io.Reader, size int64) *SizedReader {
     return &SizedReader{
         size: size,

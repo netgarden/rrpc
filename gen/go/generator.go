@@ -24,6 +24,8 @@ func (g *Generator) Generate(definition *def.Module, targetDir string) error {
 
 	tplFuncs := def.GetTemplateFuncMap()
 	tplFuncs["createFieldDefaultValue"] = createFieldDefaultValue
+	tplFuncs["goFieldType"] = goFieldType
+	tplFuncs["goJSONTag"] = goJSONTag
 	tplFuncs["methodPathParams"] = methodPathParams
 	tplFuncs["methodPathToGo"] = methodPathToGo
 	tplFuncs["methodPathHasStringParam"] = methodPathHasStringParam

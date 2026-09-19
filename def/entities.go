@@ -99,6 +99,10 @@ type Field struct {
 	Name     string
 	Type     string
 	IsStruct bool
+	// Optional is set by the @optional field annotation: the field may be
+	// absent on the wire. Generators represent that as a Go pointer (or a
+	// nil slice/map) with omitempty, and as `name?: T` in TypeScript.
+	Optional bool
 }
 
 func NewAnnotation(name string) *Annotation {
