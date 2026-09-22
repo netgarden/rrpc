@@ -1,4 +1,4 @@
-import { RRPCClient, RRPCResponse } from "rrpc-client";
+import { RRPCClient, RRPCResponse } from "$lib/rrpc";
 
 export class AuthClient {
 
@@ -39,7 +39,7 @@ class AuthServiceHandler {
 
         reqBody = JSON.stringify(request);
 
-        const res : RRPCResponse = await this._client.sendRequest(method, reqUri, reqBody);
+        const res : RRPCResponse = await this._client.sendRequest(method, reqUri, reqBody, "application/json");
 
         const ret : LoginResponse = await res.response.json();
 
@@ -55,7 +55,7 @@ class AuthServiceHandler {
         let reqUri : string = uri;
         let reqBody : string | Uint8Array | FormData | null = null;
 
-        const res : RRPCResponse = await this._client.sendRequest(method, reqUri, reqBody);
+        const res : RRPCResponse = await this._client.sendRequest(method, reqUri, reqBody, "");
 
         return;
     }

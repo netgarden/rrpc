@@ -97,7 +97,7 @@ class {{ firstLetterToUpper .Name }}ServiceHandler {
         formData.append('{{ $input.Name }}', JSON.stringify({{ firstLetterToLower $input.Name }}));
         {{- end }}
         {{- if eq $input.Type "bytes" }}
-        formData.append('{{ $input.Name }}', new Blob([{{ firstLetterToLower $input.Name }} as unknown as BlobPart]));
+        formData.append('{{ $input.Name }}', new Blob([{{ firstLetterToLower $input.Name }} as unknown as BlobPart], { type: "{{ $method.BytesPartContentType }}" }));
         {{- end }}
         {{- end }}
         reqBody = formData;
@@ -142,7 +142,7 @@ class {{ firstLetterToUpper .Name }}ServiceHandler {
 
         {{- end }}
 
-        const res : RRPCResponse = await this._client.sendRequest(method, reqUri, reqBody);
+        const res : RRPCResponse = await this._client.sendRequest(method, reqUri, reqBody{{ if not $isMultipart }}, "{{ $method.ContentType }}"{{ end }});
 
         {{ range $i, $output := $method.Outputs -}}
         {{ if $output.IsStruct -}}

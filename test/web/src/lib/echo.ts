@@ -57,7 +57,7 @@ class EchoServiceHandler {
         }
         reqUri = uri + '?' + queryParams.toString();
 
-        const res : RRPCResponse = await this._client.sendRequest(method, reqUri, reqBody);
+        const res : RRPCResponse = await this._client.sendRequest(method, reqUri, reqBody, "application/json");
 
         const ret : EchoResponse = await res.response.json();
 

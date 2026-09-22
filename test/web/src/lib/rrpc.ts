@@ -44,7 +44,15 @@ export class RRPCClient {
         this._accessToken = token;
     }
 
-    async sendRequest(method: string, uri: string, data: string | Uint8Array | FormData | null): Promise<RRPCResponse> {
+    // contentType, when given, is used as-is instead of the guess below - set
+    // by generated code from the method's declared Content-Type (auto-inferred,
+    // or overridden by @RequestContentType; see rrpc's README). Left
+    // undefined/empty, behavior is unchanged. Never applies to a FormData
+    // body: the browser must set that Content-Type itself, since it carries
+    // the multipart boundary (a multipart bytes field's own part-level
+    // Content-Type, from @RequestContentType on a multipart method, is set
+    // on that part's Blob instead - see the generated client call site).
+    async sendRequest(method: string, uri: string, data: string | Uint8Array | FormData | null, contentType?: string): Promise<RRPCResponse> {
 
         const headers : Record<string, string> = {
             'Accept': 'application/json',
@@ -59,10 +67,10 @@ export class RRPCClient {
             // do not set Content-Type; browser sets it with the correct boundary
             body = data;
         } else if (data !== null && typeof data !== 'string') {
-            headers['Content-Type'] = 'application/octet-stream';
+            headers['Content-Type'] = contentType || 'application/octet-stream';
             body = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
         } else if (data != null && data !== "") {
-            headers['Content-Type'] = 'application/json';
+            headers['Content-Type'] = contentType || 'application/json';
             body = data;
         }
 

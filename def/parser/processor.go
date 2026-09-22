@@ -403,7 +403,7 @@ func (p *Processor) computeModuleData(module *def.Module) error {
 				}
 			}
 
-			var hasStructInput, hasBytesInput bool
+			var hasStructInput, hasBytesInput, hasBytesOutput bool
 			for _, inputDef := range methodDef.Inputs {
 				if inputDef.IsStruct {
 					hasStructInput = true
@@ -411,12 +411,49 @@ func (p *Processor) computeModuleData(module *def.Module) error {
 					hasBytesInput = true
 				}
 			}
+			for _, outputDef := range methodDef.Outputs {
+				if outputDef.Type == "bytes" {
+					hasBytesOutput = true
+				}
+			}
 			if hasStructInput && hasBytesInput {
 				methodDef.ContentType = "multipart/form-data"
+				// The bytes field's own part-level Content-Type, distinct from the
+				// envelope above: matches multipart.Writer.CreateFormFile's default
+				// until/unless @RequestContentType overrides it below.
+				methodDef.BytesPartContentType = "application/octet-stream"
 			} else if hasStructInput {
 				methodDef.ContentType = "application/json"
 			} else if hasBytesInput {
 				methodDef.ContentType = "application/octet-stream"
+			}
+			if hasBytesOutput {
+				methodDef.ResponseContentType = "application/octet-stream"
+			}
+
+			if p.hasAnnotation(methodDef.Annotations, "RequestContentType") {
+				if !hasBytesInput {
+					return fmt.Errorf("method %s.%s: @RequestContentType requires a bytes input", serviceDef.Name, methodDef.Name)
+				}
+				ct := strings.ToLower(strings.TrimSpace(p.getAnnotationValue(methodDef.Annotations, "RequestContentType")))
+				if ct == "" {
+					return fmt.Errorf("method %s.%s: @RequestContentType needs a value", serviceDef.Name, methodDef.Name)
+				}
+				if hasStructInput { // multipart: the part, not the envelope (which must keep the boundary)
+					methodDef.BytesPartContentType = ct
+				} else {
+					methodDef.ContentType = ct
+				}
+			}
+			if p.hasAnnotation(methodDef.Annotations, "ResponseContentType") {
+				if !hasBytesOutput {
+					return fmt.Errorf("method %s.%s: @ResponseContentType requires a bytes output", serviceDef.Name, methodDef.Name)
+				}
+				ct := strings.ToLower(strings.TrimSpace(p.getAnnotationValue(methodDef.Annotations, "ResponseContentType")))
+				if ct == "" {
+					return fmt.Errorf("method %s.%s: @ResponseContentType needs a value", serviceDef.Name, methodDef.Name)
+				}
+				methodDef.ResponseContentType = ct
 			}
 		}
 	}

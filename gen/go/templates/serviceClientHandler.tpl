@@ -89,7 +89,7 @@ func (h *{{ firstLetterToUpper $service.Name }}ServiceClientHandler) {{ firstLet
     {{- else }}_, err :=
     {{- end}}
     {{- if $isMultipart }} h.doMultipartRequest(ctx, methodType, url,
-        {{- range $i, $input := $method.Inputs }}{{ if $input.IsStruct }} "{{ $input.Name }}", data,{{ end }}{{ if eq $input.Type "bytes" }} "{{ $input.Name }}", r0{{ end }}{{- end -}}
+        {{- range $i, $input := $method.Inputs }}{{ if $input.IsStruct }} "{{ $input.Name }}", data,{{ end }}{{ if eq $input.Type "bytes" }} "{{ $input.Name }}", r0, "{{ $method.BytesPartContentType }}"{{ end }}{{- end -}}
     )
     {{- else }} h.doHttpRequest(ctx, methodType, url, "{{ $method.ContentType }}",
         {{- if eq (len $method.Inputs) 1 }}
@@ -194,7 +194,7 @@ func (h *{{ firstLetterToUpper $service.Name }}ServiceClientHandler) doHttpReque
 }
 
 {{ if $serviceHasMultipart -}}
-func (h *{{ firstLetterToUpper $service.Name }}ServiceClientHandler) doMultipartRequest(ctx context.Context, method string, url string, structField string, in interface{}, bytesField string, r io.Reader) (*SizedReadCloser, error) {
+func (h *{{ firstLetterToUpper $service.Name }}ServiceClientHandler) doMultipartRequest(ctx context.Context, method string, url string, structField string, in interface{}, bytesField string, r io.Reader, bytesContentType string) (*SizedReadCloser, error) {
 
     var buf bytes.Buffer
     mw := multipart.NewWriter(&buf)
@@ -211,7 +211,7 @@ func (h *{{ firstLetterToUpper $service.Name }}ServiceClientHandler) doMultipart
         return nil, rrpc.ErrRrpcBadRequest.WithCausef("failed to write form field: %w", err)
     }
 
-    bw, err := mw.CreateFormFile(bytesField, bytesField)
+    bw, err := mw.CreatePart(rrpc.FormDataPartHeader(bytesField, bytesField, bytesContentType))
     if err != nil {
         return nil, rrpc.ErrRrpcBadRequest.WithCausef("failed to create form file: %w", err)
     }

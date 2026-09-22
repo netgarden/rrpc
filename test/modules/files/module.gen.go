@@ -16,7 +16,10 @@ type UploadDataInfo struct {
 
 type FilesService interface {
     Upload(ctx *rrpc.Context, r io.Reader) error
+    UploadJSON(ctx *rrpc.Context, r io.Reader) error
     Upload2(ctx *rrpc.Context, info *UploadDataInfo, r io.Reader) error
+    Upload2PDF(ctx *rrpc.Context, info *UploadDataInfo, r io.Reader) error
     Download(ctx *rrpc.Context, w io.Writer) error
+    DownloadPDF(ctx *rrpc.Context, w io.Writer) error
 }
 

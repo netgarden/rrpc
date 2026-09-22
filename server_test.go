@@ -2,6 +2,7 @@ package rrpc_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -49,6 +50,10 @@ type storeService struct {
 	lastUpload     []byte
 	lastUploadName string
 	downloadData   []byte
+	// downloadContentTypeOverride, when set, is written by Download/DownloadPDF
+	// before the first Write - exercises that a handler can still override the
+	// response Content-Type at runtime, same as before @ResponseContentType.
+	downloadContentTypeOverride string
 }
 
 func (s *storeService) Upload(ctx *rrpc.Context, r io.Reader) error {
@@ -60,9 +65,20 @@ func (s *storeService) Upload(ctx *rrpc.Context, r io.Reader) error {
 	return nil
 }
 
+func (s *storeService) UploadJSON(ctx *rrpc.Context, r io.Reader) error {
+	return s.Upload(ctx, r)
+}
+
 func (s *storeService) Download(ctx *rrpc.Context, w io.Writer) error {
+	if s.downloadContentTypeOverride != "" {
+		ctx.Response().Header().Set("Content-Type", s.downloadContentTypeOverride)
+	}
 	_, err := w.Write(s.downloadData)
 	return err
+}
+
+func (s *storeService) DownloadPDF(ctx *rrpc.Context, w io.Writer) error {
+	return s.Download(ctx, w)
 }
 
 func (s *storeService) Upload2(ctx *rrpc.Context, info *testmodule.UploadInfo, r io.Reader) error {
@@ -73,6 +89,10 @@ func (s *storeService) Upload2(ctx *rrpc.Context, info *testmodule.UploadInfo, r
 	s.lastUpload = data
 	s.lastUploadName = info.Filename
 	return nil
+}
+
+func (s *storeService) Upload2PDF(ctx *rrpc.Context, info *testmodule.UploadInfo, r io.Reader) error {
+	return s.Upload2(ctx, info, r)
 }
 
 // ---------------------------------------------------------------------------
@@ -162,6 +182,32 @@ func TestServer_WrongContentType(t *testing.T) {
 	w := ts.do(t, "POST", "/test/sum", "text/plain", `{"a":1,"b":2}`)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", w.Code)
+	}
+}
+
+// TestServer_WrongContentType_SingleCleanResponse is the regression test for
+// a real bug: the Content-Type mismatch branch used to call sendErrorJSON
+// itself and then fall through into running the handler anyway (no return),
+// so the response body was the error JSON immediately followed by a second,
+// unrelated JSON body - and, for a method with a side effect, the side
+// effect still happened despite the 400. Assert both: exactly one
+// well-formed JSON error body, and the handler never ran.
+func TestServer_WrongContentType_SingleCleanResponse(t *testing.T) {
+	ts := newTestServer(t)
+	w := ts.do(t, "PUT", "/test/upload", "application/json", "binary content here")
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d — body: %s", w.Code, w.Body.String())
+	}
+	var rpcErr rrpc.RRPCError
+	dec := json.NewDecoder(w.Body)
+	if err := dec.Decode(&rpcErr); err != nil {
+		t.Fatalf("response body is not valid JSON: %v (body: %s)", err, w.Body.String())
+	}
+	if dec.More() {
+		t.Fatalf("response body has trailing data after the error JSON (the double-write bug): %s", w.Body.String())
+	}
+	if ts.store.lastUpload != nil {
+		t.Errorf("handler ran despite the Content-Type mismatch: lastUpload = %q", ts.store.lastUpload)
 	}
 }
 
@@ -262,6 +308,29 @@ func TestServer_UploadBytes(t *testing.T) {
 	}
 }
 
+// TestServer_UploadJSON_OverriddenContentType exercises
+// @RequestContentType("application/json") on uploadJSON: the annotation
+// changes what the *server* requires, not just what a generated client sends
+// - so the old default (application/octet-stream) must now be rejected for
+// this method, and the declared value accepted.
+func TestServer_UploadJSON_OverriddenContentType(t *testing.T) {
+	ts := newTestServer(t)
+	payload := []byte(`{"not":"actually parsed, just embedded"}`)
+
+	w := ts.do(t, "PUT", "/test/uploadJSON", "application/json", string(payload))
+	if w.Code != http.StatusOK {
+		t.Fatalf("application/json should be accepted: expected 200, got %d — body: %s", w.Code, w.Body.String())
+	}
+	if !bytes.Equal(ts.store.lastUpload, payload) {
+		t.Errorf("uploaded data mismatch: got %q", ts.store.lastUpload)
+	}
+
+	w = ts.do(t, "PUT", "/test/uploadJSON", "application/octet-stream", "irrelevant")
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("the old default should now be rejected for this method: expected 400, got %d — body: %s", w.Code, w.Body.String())
+	}
+}
+
 // ---------------------------------------------------------------------------
 // POST — multipart (struct + bytes)
 // ---------------------------------------------------------------------------
@@ -297,6 +366,67 @@ func TestServer_UploadMultipart(t *testing.T) {
 	}
 }
 
+// TestClient_MultipartBytesPartContentType is the case the whole envelope/
+// part split exists for: @RequestContentType on a multipart method
+// (upload2PDF) must change the *bytes field's own part* Content-Type, not
+// the envelope - which must keep carrying the boundary untouched, exactly
+// like an unannotated multipart method (upload2). Exercised through the
+// real generated client (not a hand-built request), against a plain capture
+// handler rather than the full rrpc dispatch, since the server intentionally
+// doesn't expose a multipart part's own header back to the service method
+// (see the "Multipart server-side validation" decision - this test is about
+// what the client sends, not server-side enforcement).
+func TestClient_MultipartBytesPartContentType(t *testing.T) {
+	cases := []struct {
+		name       string
+		call       func(c *testmodule.Client) error
+		wantPartCT string
+	}{
+		{
+			name: "unannotated upload2 keeps the old default",
+			call: func(c *testmodule.Client) error {
+				return c.Store.Upload2(context.Background(), &testmodule.UploadInfo{Filename: "x.bin"}, strings.NewReader("data"))
+			},
+			wantPartCT: "application/octet-stream",
+		},
+		{
+			name: "upload2PDF uses the @RequestContentType override",
+			call: func(c *testmodule.Client) error {
+				return c.Store.Upload2PDF(context.Background(), &testmodule.UploadInfo{Filename: "x.pdf"}, strings.NewReader("data"))
+			},
+			wantPartCT: "application/pdf",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var gotPartCT, gotEnvelopeCT string
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotEnvelopeCT = r.Header.Get("Content-Type")
+				if err := r.ParseMultipartForm(1 << 20); err != nil {
+					t.Fatal(err)
+				}
+				if fhs := r.MultipartForm.File["data"]; len(fhs) > 0 {
+					gotPartCT = fhs[0].Header.Get("Content-Type")
+				}
+				w.Header().Set("Content-Length", "0")
+				w.WriteHeader(http.StatusOK)
+			}))
+			defer srv.Close()
+
+			client := testmodule.NewClient(srv.URL)
+			if err := tc.call(client); err != nil {
+				t.Fatal(err)
+			}
+			if gotPartCT != tc.wantPartCT {
+				t.Errorf("multipart part Content-Type = %q, want %q", gotPartCT, tc.wantPartCT)
+			}
+			if !strings.HasPrefix(gotEnvelopeCT, "multipart/form-data; boundary=") {
+				t.Errorf("envelope Content-Type = %q, want multipart/form-data with a boundary - unaffected by the annotation", gotEnvelopeCT)
+			}
+		})
+	}
+}
+
 // ---------------------------------------------------------------------------
 // GET — bytes response
 // ---------------------------------------------------------------------------
@@ -315,6 +445,44 @@ func TestServer_DownloadBytes(t *testing.T) {
 	}
 	if !bytes.Equal(w.Body.Bytes(), ts.store.downloadData) {
 		t.Errorf("expected body %q, got %q", ts.store.downloadData, w.Body.Bytes())
+	}
+}
+
+// TestServer_DownloadPDF_OverriddenContentType exercises
+// @ResponseContentType("application/pdf") on downloadPDF: the default the
+// server sets (when the handler hasn't already set one) follows the
+// annotation instead of the old hardcoded application/octet-stream.
+func TestServer_DownloadPDF_OverriddenContentType(t *testing.T) {
+	ts := newTestServer(t)
+	ts.store.downloadData = []byte("%PDF-1.4 pretend this is a pdf")
+
+	w := ts.do(t, "GET", "/test/downloadPDF", "", "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d — body: %s", w.Code, w.Body.String())
+	}
+	if ct := w.Header().Get("Content-Type"); ct != "application/pdf" {
+		t.Errorf("expected Content-Type application/pdf, got %q", ct)
+	}
+	if !bytes.Equal(w.Body.Bytes(), ts.store.downloadData) {
+		t.Errorf("expected body %q, got %q", ts.store.downloadData, w.Body.Bytes())
+	}
+}
+
+// TestServer_DownloadPDF_HandlerCanStillOverrideAtRuntime confirms the
+// "only if not already set" escape hatch (response_writer.go) still works
+// when the default itself now comes from @ResponseContentType: a handler
+// that sets its own Content-Type before writing still wins.
+func TestServer_DownloadPDF_HandlerCanStillOverrideAtRuntime(t *testing.T) {
+	ts := newTestServer(t)
+	ts.store.downloadData = []byte("data")
+	ts.store.downloadContentTypeOverride = "application/x-custom"
+
+	w := ts.do(t, "GET", "/test/downloadPDF", "", "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d — body: %s", w.Code, w.Body.String())
+	}
+	if ct := w.Header().Get("Content-Type"); ct != "application/x-custom" {
+		t.Errorf("handler-set Content-Type should win over @ResponseContentType's default: got %q", ct)
 	}
 }
 

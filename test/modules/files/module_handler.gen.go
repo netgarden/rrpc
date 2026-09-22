@@ -27,16 +27,34 @@ func newFilesServiceHandler(service FilesService) *FilesServiceHandler {
             HandlerFunc: serviceHandler.handleUpload,
         },
         {
+            Path:        rrpc.ParsePath("/uploadJSON/{filename:string}"),
+            Type:        "PUT",
+            ContentType: "application/json",
+            HandlerFunc: serviceHandler.handleUploadJSON,
+        },
+        {
             Path:        rrpc.ParsePath("/upload2"),
             Type:        "POST",
             ContentType: "multipart/form-data",
             HandlerFunc: serviceHandler.handleUpload2,
         },
         {
+            Path:        rrpc.ParsePath("/upload2PDF"),
+            Type:        "POST",
+            ContentType: "multipart/form-data",
+            HandlerFunc: serviceHandler.handleUpload2PDF,
+        },
+        {
             Path:        rrpc.ParsePath("/download/{filename:string}"),
             Type:        "GET",
             ContentType: "",
             HandlerFunc: serviceHandler.handleDownload,
+        },
+        {
+            Path:        rrpc.ParsePath("/downloadPDF/{filename:string}"),
+            Type:        "GET",
+            ContentType: "",
+            HandlerFunc: serviceHandler.handleDownloadPDF,
         },
     }
     serviceHandler.service = service
@@ -68,6 +86,25 @@ func (h *FilesServiceHandler) handleUpload(ctx *rrpc.Context) error {
 
 	// Call service method implementation.
     err1 := h.service.Upload(ctx, ctx.Request().Body)
+    if err1 != nil {
+    	rpcErr, ok := err1.(rrpc.RRPCError)
+    	if !ok {
+    		rpcErr = rrpc.ErrRrpcEndpoint.WithCause(err1)
+    	}
+    	return rpcErr
+    }
+
+	// ctx.Response().WriteHeader(http.StatusOK)
+
+    
+
+	return nil
+}
+
+func (h *FilesServiceHandler) handleUploadJSON(ctx *rrpc.Context) error {
+
+	// Call service method implementation.
+    err1 := h.service.UploadJSON(ctx, ctx.Request().Body)
     if err1 != nil {
     	rpcErr, ok := err1.(rrpc.RRPCError)
     	if !ok {
@@ -115,6 +152,38 @@ func (h *FilesServiceHandler) handleUpload2(ctx *rrpc.Context) error {
 	return nil
 }
 
+func (h *FilesServiceHandler) handleUpload2PDF(ctx *rrpc.Context) error {
+
+	if err := ctx.Request().ParseMultipartForm(32 << 20); err != nil {
+		return rrpc.ErrRrpcBadRequest.WithCausef("failed to parse multipart form: %w", err)
+	}
+	reqPayload := &UploadDataInfo{}
+	if err := json.Unmarshal([]byte(ctx.Request().FormValue("info")), reqPayload); err != nil {
+		return rrpc.ErrRrpcBadRequest.WithCausef("failed to unmarshal info field: %w", err)
+	}
+	dataFile, _, err := ctx.Request().FormFile("data")
+	if err != nil {
+		return rrpc.ErrRrpcBadRequest.WithCausef("failed to read data field: %w", err)
+	}
+	defer dataFile.Close()
+
+	// Call service method implementation.
+    err1 := h.service.Upload2PDF(ctx, reqPayload, dataFile)
+    if err1 != nil {
+    	rpcErr, ok := err1.(rrpc.RRPCError)
+    	if !ok {
+    		rpcErr = rrpc.ErrRrpcEndpoint.WithCause(err1)
+    	}
+    	return rpcErr
+    }
+
+	// ctx.Response().WriteHeader(http.StatusOK)
+
+    
+
+	return nil
+}
+
 func (h *FilesServiceHandler) handleDownload(ctx *rrpc.Context) error {
 
 	w1 := rrpc.NewResponseWriter(ctx.Response(), "application/octet-stream")
@@ -135,6 +204,31 @@ func (h *FilesServiceHandler) handleDownload(ctx *rrpc.Context) error {
     
         if ctx.Response().Header().Get("Content-Type") == "" {
             ctx.Response().Header().Set("Content-Type", "application/octet-stream")
+        }
+
+	return nil
+}
+
+func (h *FilesServiceHandler) handleDownloadPDF(ctx *rrpc.Context) error {
+
+	w1 := rrpc.NewResponseWriter(ctx.Response(), "application/pdf")
+
+    // Call service method implementation.
+    err1 := h.service.DownloadPDF(ctx, w1)
+    if err1 != nil {
+    	rpcErr, ok := err1.(rrpc.RRPCError)
+    	if !ok {
+    		rpcErr = rrpc.ErrRrpcEndpoint.WithCause(err1)
+    	}
+    	return rpcErr
+    }
+
+	// ctx.Response().WriteHeader(http.StatusOK)
+
+    
+    
+        if ctx.Response().Header().Get("Content-Type") == "" {
+            ctx.Response().Header().Set("Content-Type", "application/pdf")
         }
 
 	return nil
@@ -180,13 +274,41 @@ func (h *FilesServiceClientHandler) Upload(ctx context.Context, filename string,
     return nil
 }
 
+func (h *FilesServiceClientHandler) UploadJSON(ctx context.Context, filename string, r0 io.Reader)error {
+
+    methodType := "PUT"
+    methodPath := fmt.Sprintf("/uploadJSON/%s", url.PathEscape(filename))
+    url := joinURLPath(h.client.url, h.path, methodPath)
+
+    _, err := h.doHttpRequest(ctx, methodType, url, "application/json",r0)
+    if err != nil {
+        return err
+    }
+
+    return nil
+}
+
 func (h *FilesServiceClientHandler) Upload2(ctx context.Context, data *UploadDataInfo, r0 io.Reader)error {
 
     methodType := "POST"
     methodPath := "/upload2"
     url := joinURLPath(h.client.url, h.path, methodPath)
 
-    _, err := h.doMultipartRequest(ctx, methodType, url, "info", data, "data", r0)
+    _, err := h.doMultipartRequest(ctx, methodType, url, "info", data, "data", r0, "application/octet-stream")
+    if err != nil {
+        return err
+    }
+
+    return nil
+}
+
+func (h *FilesServiceClientHandler) Upload2PDF(ctx context.Context, data *UploadDataInfo, r0 io.Reader)error {
+
+    methodType := "POST"
+    methodPath := "/upload2PDF"
+    url := joinURLPath(h.client.url, h.path, methodPath)
+
+    _, err := h.doMultipartRequest(ctx, methodType, url, "info", data, "data", r0, "application/pdf")
     if err != nil {
         return err
     }
@@ -198,6 +320,20 @@ func (h *FilesServiceClientHandler) Download(ctx context.Context, filename strin
 
     methodType := "GET"
     methodPath := fmt.Sprintf("/download/%s", url.PathEscape(filename))
+    url := joinURLPath(h.client.url, h.path, methodPath)
+
+    r, err := h.doHttpRequest(ctx, methodType, url, "",nil)
+    if err != nil {
+        return nil, err
+    }
+
+    return r, nil
+}
+
+func (h *FilesServiceClientHandler) DownloadPDF(ctx context.Context, filename string) (*SizedReadCloser, error) {
+
+    methodType := "GET"
+    methodPath := fmt.Sprintf("/downloadPDF/%s", url.PathEscape(filename))
     url := joinURLPath(h.client.url, h.path, methodPath)
 
     r, err := h.doHttpRequest(ctx, methodType, url, "",nil)
@@ -264,7 +400,7 @@ func (h *FilesServiceClientHandler) doHttpRequest(ctx context.Context, method st
     return ret, nil
 }
 
-func (h *FilesServiceClientHandler) doMultipartRequest(ctx context.Context, method string, url string, structField string, in interface{}, bytesField string, r io.Reader) (*SizedReadCloser, error) {
+func (h *FilesServiceClientHandler) doMultipartRequest(ctx context.Context, method string, url string, structField string, in interface{}, bytesField string, r io.Reader, bytesContentType string) (*SizedReadCloser, error) {
 
     var buf bytes.Buffer
     mw := multipart.NewWriter(&buf)
@@ -281,7 +417,7 @@ func (h *FilesServiceClientHandler) doMultipartRequest(ctx context.Context, meth
         return nil, rrpc.ErrRrpcBadRequest.WithCausef("failed to write form field: %w", err)
     }
 
-    bw, err := mw.CreateFormFile(bytesField, bytesField)
+    bw, err := mw.CreatePart(rrpc.FormDataPartHeader(bytesField, bytesField, bytesContentType))
     if err != nil {
         return nil, rrpc.ErrRrpcBadRequest.WithCausef("failed to create form file: %w", err)
     }

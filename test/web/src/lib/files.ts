@@ -1,4 +1,4 @@
-import { RRPCClient, RRPCResponse } from "rrpc-client";
+import { RRPCClient, RRPCResponse } from "$lib/rrpc";
 
 export class FilesClient {
 
@@ -39,7 +39,23 @@ class FilesServiceHandler {
 
         reqBody = data;
 
-        const res : RRPCResponse = await this._client.sendRequest(method, reqUri, reqBody);
+        const res : RRPCResponse = await this._client.sendRequest(method, reqUri, reqBody, "application/octet-stream");
+
+        return;
+    }
+
+    async uploadJSON(filename: string, data: string | Uint8Array) : Promise<void> {
+
+        const method = "PUT";
+        const methodPath = "/uploadJSON/" + encodeURIComponent(filename);
+        const uri = ('/' + this._path + '/' + methodPath).replace(/\/+/g, '/');
+
+        let reqUri : string = uri;
+        let reqBody : string | Uint8Array | FormData | null = null;
+
+        reqBody = data;
+
+        const res : RRPCResponse = await this._client.sendRequest(method, reqUri, reqBody, "application/json");
 
         return;
     }
@@ -55,7 +71,26 @@ class FilesServiceHandler {
 
         const formData = new FormData();
         formData.append('info', JSON.stringify(info));
-        formData.append('data', new Blob([data as unknown as BlobPart]));
+        formData.append('data', new Blob([data as unknown as BlobPart], { type: "application/octet-stream" }));
+        reqBody = formData;
+
+        const res : RRPCResponse = await this._client.sendRequest(method, reqUri, reqBody);
+
+        return;
+    }
+
+    async upload2PDF(info: UploadDataInfo, data: string | Uint8Array) : Promise<void> {
+
+        const method = "POST";
+        const methodPath = "/upload2PDF";
+        const uri = ('/' + this._path + '/' + methodPath).replace(/\/+/g, '/');
+
+        let reqUri : string = uri;
+        let reqBody : string | Uint8Array | FormData | null = null;
+
+        const formData = new FormData();
+        formData.append('info', JSON.stringify(info));
+        formData.append('data', new Blob([data as unknown as BlobPart], { type: "application/pdf" }));
         reqBody = formData;
 
         const res : RRPCResponse = await this._client.sendRequest(method, reqUri, reqBody);
@@ -72,7 +107,23 @@ class FilesServiceHandler {
         let reqUri : string = uri;
         let reqBody : string | Uint8Array | FormData | null = null;
 
-        const res : RRPCResponse = await this._client.sendRequest(method, reqUri, reqBody);
+        const res : RRPCResponse = await this._client.sendRequest(method, reqUri, reqBody, "");
+
+        const ret : Uint8Array = new Uint8Array(await res.response.arrayBuffer());
+
+        return ret;
+    }
+
+    async downloadPDF(filename: string) : Promise<Uint8Array> {
+
+        const method = "GET";
+        const methodPath = "/downloadPDF/" + encodeURIComponent(filename);
+        const uri = ('/' + this._path + '/' + methodPath).replace(/\/+/g, '/');
+
+        let reqUri : string = uri;
+        let reqBody : string | Uint8Array | FormData | null = null;
+
+        const res : RRPCResponse = await this._client.sendRequest(method, reqUri, reqBody, "");
 
         const ret : Uint8Array = new Uint8Array(await res.response.arrayBuffer());
 

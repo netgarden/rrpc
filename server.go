@@ -180,8 +180,12 @@ func (s *Server) handle(ctx context.Context, w http.ResponseWriter, r *http.Requ
 		contentType = strings.TrimSpace(strings.ToLower(contentType))
 
 		if contentType != matched.method.ContentType {
-			err := ErrRrpcBadRequest.WithCausef("unsupported Content-Type %q (only %s is allowed)", r.Header.Get(ContentTypeHeader), matched.method.ContentType)
-			s.sendErrorJSON(w, r, err)
+			// Every other error path in this function just returns; coreHandle
+			// (the caller) is the one that calls sendErrorJSON. Doing it here
+			// too (as this used to) both duplicates that and - since nothing
+			// stopped the handler from still running afterward - produced a
+			// corrupted, doubly-written response.
+			return nil, ErrRrpcBadRequest.WithCausef("unsupported Content-Type %q (only %s is allowed)", r.Header.Get(ContentTypeHeader), matched.method.ContentType)
 		}
 	}
 

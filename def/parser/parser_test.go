@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	def "github.com/netgarden/rrpc/def"
 )
 
 // TestParse_SameFileIncludedFromTwoDifferentSources is the regression
@@ -180,6 +182,160 @@ func TestParse_OptionalAnnotationErrors(t *testing.T) {
 				}
 			}()
 			if _, err := parseStruct(t, body); err == nil {
+				t.Error("expected an error")
+			}
+		})
+	}
+}
+
+// parseService parses one service named "S" (with a shared "Info" struct
+// available for multipart methods) and returns its methods by name, for
+// inspecting the fields the processor computed (ContentType,
+// ResponseContentType, BytesPartContentType).
+func parseService(t *testing.T, serviceBody string) (map[string]*def.Method, error) {
+	t.Helper()
+	dir := t.TempDir()
+	mustWrite(t, filepath.Join(dir, "module.rrpc"),
+		"name = \"test\"\nversion = \"0.0.1\"\noption go_package = \"test\"\n\n"+
+			"struct Info {\n    n int\n}\n\n@Path(\"/s\")\nservice S {\n"+serviceBody+"\n}\n")
+	mod, err := New().Parse(filepath.Join(dir, "module.rrpc"))
+	if err != nil {
+		return nil, err
+	}
+	got := map[string]*def.Method{}
+	for _, s := range mod.Services {
+		if s.Name == "S" {
+			for _, m := range s.Methods {
+				got[m.Name] = m
+			}
+		}
+	}
+	return got, nil
+}
+
+func TestParse_RequestContentType_SingleBytes(t *testing.T) {
+	methods, err := parseService(t, `
+    @method("POST")
+    @RequestContentType("  Application/JSON  ")
+    upload(data bytes)
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := methods["upload"]
+	if m == nil {
+		t.Fatal("method not found")
+	}
+	if m.ContentType != "application/json" {
+		t.Errorf("ContentType = %q, want application/json (trimmed and lowercased)", m.ContentType)
+	}
+	if m.BytesPartContentType != "" {
+		t.Errorf("BytesPartContentType = %q, want empty for a non-multipart method", m.BytesPartContentType)
+	}
+}
+
+func TestParse_RequestContentType_Multipart(t *testing.T) {
+	methods, err := parseService(t, `
+    @method("POST")
+    @RequestContentType("application/pdf")
+    upload(info Info, data bytes)
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := methods["upload"]
+	if m == nil {
+		t.Fatal("method not found")
+	}
+	if m.ContentType != "multipart/form-data" {
+		t.Errorf("ContentType = %q, want multipart/form-data (the envelope, untouched)", m.ContentType)
+	}
+	if m.BytesPartContentType != "application/pdf" {
+		t.Errorf("BytesPartContentType = %q, want application/pdf (the part, overridden)", m.BytesPartContentType)
+	}
+}
+
+func TestParse_RequestContentType_DefaultsWhenUnannotated(t *testing.T) {
+	methods, err := parseService(t, `
+    @method("POST")
+    single(data bytes)
+
+    @method("POST")
+    multipart(info Info, data bytes)
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := methods["single"].ContentType; got != "application/octet-stream" {
+		t.Errorf("single.ContentType = %q, want application/octet-stream", got)
+	}
+	if got := methods["multipart"].BytesPartContentType; got != "application/octet-stream" {
+		t.Errorf("multipart.BytesPartContentType = %q, want application/octet-stream", got)
+	}
+}
+
+func TestParse_ResponseContentType(t *testing.T) {
+	methods, err := parseService(t, `
+    @method("GET")
+    @ResponseContentType("application/pdf")
+    download() bytes
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := methods["download"].ResponseContentType; got != "application/pdf" {
+		t.Errorf("ResponseContentType = %q, want application/pdf", got)
+	}
+}
+
+func TestParse_RequestAndResponseContentType_SameMethod(t *testing.T) {
+	methods, err := parseService(t, `
+    @method("POST")
+    @RequestContentType("application/json")
+    @ResponseContentType("application/pdf")
+    transform(data bytes) bytes
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := methods["transform"]
+	if m == nil {
+		t.Fatal("method not found")
+	}
+	if m.ContentType != "application/json" {
+		t.Errorf("ContentType = %q, want application/json", m.ContentType)
+	}
+	if m.ResponseContentType != "application/pdf" {
+		t.Errorf("ResponseContentType = %q, want application/pdf", m.ResponseContentType)
+	}
+}
+
+func TestParse_ContentTypeAnnotationErrors(t *testing.T) {
+	cases := map[string]string{
+		"@RequestContentType, no bytes input": `
+    @method("POST")
+    @RequestContentType("application/json")
+    create(info Info)
+`,
+		"@RequestContentType, no value": `
+    @method("POST")
+    @RequestContentType
+    upload(data bytes)
+`,
+		"@ResponseContentType, no bytes output": `
+    @method("POST")
+    @ResponseContentType("application/json")
+    create(info Info) (Info)
+`,
+		"@ResponseContentType, no value": `
+    @method("GET")
+    @ResponseContentType
+    download() bytes
+`,
+	}
+	for name, body := range cases {
+		t.Run(name, func(t *testing.T) {
+			if _, err := parseService(t, body); err == nil {
 				t.Error("expected an error")
 			}
 		})

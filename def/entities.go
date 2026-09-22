@@ -143,13 +143,33 @@ func NewMethod(name string) *Method {
 }
 
 type Method struct {
-	Name        string
-	Path        string
-	Type        string
+	Name string
+	Path string
+	Type string
+	// ContentType is the whole request's Content-Type: auto-inferred from
+	// Inputs (see the processor), or overridden by @RequestContentType for a
+	// method with a single bytes input (no accompanying struct - that's
+	// multipart, see BytesPartContentType instead). For a multipart method
+	// this always stays "multipart/form-data" (the boundary is added at
+	// send time); @RequestContentType never touches it in that case.
 	ContentType string
-	Inputs      []*Field
-	Outputs     []*Field
-	Annotations []*Annotation
+	// ResponseContentType is the default Content-Type the server sets on a
+	// bytes response, auto-inferred as "application/octet-stream" for a
+	// bytes output or overridden by @ResponseContentType. Baked into
+	// generated code as a literal; not part of the runtime Method/
+	// MethodHolder struct (see rrpc/server.go), since nothing needs to read
+	// it after codegen.
+	ResponseContentType string
+	// BytesPartContentType is the multipart bytes field's own part-level
+	// Content-Type (distinct from ContentType, the envelope) - auto-inferred
+	// as "application/octet-stream" (matching multipart.Writer.
+	// CreateFormFile's default) for a method combining a struct input with a
+	// bytes input, or overridden by @RequestContentType on such a method.
+	// Empty/unused for a non-multipart method.
+	BytesPartContentType string
+	Inputs               []*Field
+	Outputs              []*Field
+	Annotations          []*Annotation
 	// Streaming and StreamDirection are set by the processor when a
 	// method carries @Stream/@InputStream/@OutputStream. StreamDirection
 	// is one of "both"/"in"/"out" and is only meaningful when Streaming

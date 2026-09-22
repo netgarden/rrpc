@@ -76,11 +76,26 @@ service Store {
     @Path("/upload")
     upload(data bytes)
 
+    @method("PUT")
+    @Path("/uploadJSON")
+    @RequestContentType("application/json")
+    uploadJSON(data bytes)
+
     @method("POST")
     @Path("/upload2")
     upload2(info UploadInfo, data bytes)
 
+    @method("POST")
+    @Path("/upload2PDF")
+    @RequestContentType("application/pdf")
+    upload2PDF(info UploadInfo, data bytes)
+
     @method("GET")
     @Path("/download")
     download() bytes
+
+    @method("GET")
+    @Path("/downloadPDF")
+    @ResponseContentType("application/pdf")
+    downloadPDF() bytes
 }

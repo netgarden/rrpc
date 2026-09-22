@@ -35,6 +35,13 @@ func (s *FilesService) Upload(ctx *rrpc.Context, r io.Reader) error {
 	return err
 }
 
+// UploadJSON is identical to Upload; it exists to exercise
+// @RequestContentType("application/json") on a single-bytes method
+// end-to-end (see rrpc/server_test.go's TestServer_* Content-Type tests).
+func (s *FilesService) UploadJSON(ctx *rrpc.Context, r io.Reader) error {
+	return s.Upload(ctx, r)
+}
+
 func (s *FilesService) Upload2(ctx *rrpc.Context, info *files.UploadDataInfo, r io.Reader) error {
 	filePath := filepath.Join(s.dir, filepath.Base(info.Filename))
 
@@ -46,6 +53,13 @@ func (s *FilesService) Upload2(ctx *rrpc.Context, info *files.UploadDataInfo, r 
 
 	_, err = io.Copy(f, r)
 	return err
+}
+
+// Upload2PDF is identical to Upload2; it exists to exercise
+// @RequestContentType("application/pdf") on a multipart method's bytes part
+// end-to-end.
+func (s *FilesService) Upload2PDF(ctx *rrpc.Context, info *files.UploadDataInfo, r io.Reader) error {
+	return s.Upload2(ctx, info, r)
 }
 
 func (s *FilesService) Download(ctx *rrpc.Context, w io.Writer) error {
@@ -64,4 +78,10 @@ func (s *FilesService) Download(ctx *rrpc.Context, w io.Writer) error {
 
 	_, err = io.Copy(w, f)
 	return err
+}
+
+// DownloadPDF is identical to Download; it exists to exercise
+// @ResponseContentType("application/pdf") end-to-end.
+func (s *FilesService) DownloadPDF(ctx *rrpc.Context, w io.Writer) error {
+	return s.Download(ctx, w)
 }

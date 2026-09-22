@@ -104,9 +104,24 @@ service Example {
     @Path("/upload/{filename:string}")
     upload(data bytes)
 
+    @method("PUT")
+    @Path("/uploadJSON/{filename:string}")
+    @RequestContentType("application/json")
+    uploadJSON(data bytes)
+
+    @method("POST")
+    @Path("/uploadWithInfo")
+    @RequestContentType("application/pdf")
+    uploadWithInfo(info UploadInfo, data bytes)
+
     @method("GET")
     @Path("/download/{filename:string}")
     download() bytes
+
+    @method("GET")
+    @Path("/downloadPDF/{filename:string}")
+    @ResponseContentType("application/pdf")
+    downloadPDF() bytes
 
     @method("POST")
     @Path("/search")
@@ -127,6 +142,29 @@ service Example {
 | `GET`, `HEAD`, `DELETE` | Single struct (serialised as query params); `bytes` inputs are not allowed |
 
 A single `bytes` output is streamed; the handler receives an `io.Writer` to write into.
+
+**`@RequestContentType`/`@ResponseContentType`** override the Content-Type a `bytes` method
+uses on the wire — see the "Request body encoding by method type" table below for the defaults
+they override. Each requires a matching `bytes` input/output; using either where there's nothing
+for it to apply to is a parse error.
+
+- `@RequestContentType` on a method with a **single** `bytes` input (`uploadJSON` above) changes
+  the whole request's Content-Type: what the server requires, and what a Go/TS client sends.
+- `@RequestContentType` on a **multipart** method (`uploadWithInfo` above, struct + `bytes`)
+  instead changes the *bytes field's own part*, inside the multipart body — the envelope's
+  Content-Type must keep carrying the boundary (`multipart/form-data; boundary=...`) and is
+  never affected by this annotation.
+- `@ResponseContentType` changes the default `Content-Type` a `bytes`-output method's response
+  carries, when the handler hasn't already set one itself (it still can, at runtime, overriding
+  the annotation's default — this is unchanged from how the plain `bytes`-output default already
+  worked).
+- Both may be used on the same method if it has `bytes` on both sides (e.g.
+  `transform(data bytes) bytes`) — they're independent, and can differ.
+
+The Go client picks up `@RequestContentType`/`@ResponseContentType` automatically, the next time
+a consumer regenerates. The TS client also supports both, but `ts/client.ts` is meant to be
+copied by hand into each consumer's own tree (there is no npm package) — a consumer only gets
+this fix once it re-copies that file, not just by regenerating its own `.ts` client code.
 
 **Path parameters** use `{name:type}` syntax:
 
@@ -393,10 +431,14 @@ The HTTP status code is set from the error's `http_code` (module errors) or the 
 |-------------------------|--------------|----------|
 | None                    | any          | No body |
 | Single struct           | POST / PUT   | JSON body (`application/json`) |
-| Single `bytes`          | POST / PUT   | Raw binary body (`application/octet-stream`) |
-| Struct + `bytes`        | POST / PUT   | Multipart form data (`multipart/form-data`); struct as named JSON field, bytes as file field |
+| Single `bytes`          | POST / PUT   | Raw binary body (`application/octet-stream` by default, or `@RequestContentType`'s value) |
+| Struct + `bytes`        | POST / PUT   | Multipart form data (envelope always `multipart/form-data`, boundary added at send time); struct as a named JSON field, bytes as a file field whose own part-level Content-Type is `application/octet-stream` by default, or `@RequestContentType`'s value — the envelope itself is never affected by that annotation |
 | Single struct           | GET          | URL query parameters (see below) |
 | Single struct           | HEAD / DELETE | JSON body, like POST — but the validator still requires primitive fields, as if they were query parameters |
+
+A `bytes` output's response `Content-Type` defaults to `application/octet-stream`, or
+`@ResponseContentType`'s value; a handler may still override it at runtime by setting the header
+itself before writing, same as before this existed.
 
 **GET query parameters.** The Go client (`rrpc.EncodeQueryParams`) and the TS client encode the request struct into the query string; the server decodes it with `rrpc.DecodeQueryParams`. Both use the struct's JSON names:
 

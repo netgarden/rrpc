@@ -1,4 +1,4 @@
-import { RRPCClient, RRPCResponse } from "rrpc-client";
+import { RRPCClient, RRPCResponse, escapePathValue } from "$lib/rrpc";
 
 export class TestClient {
 
@@ -39,7 +39,7 @@ class PingerServiceHandler {
         let reqUri : string = uri;
         let reqBody : string | Uint8Array | FormData | null = null;
 
-        const res : RRPCResponse = await this._client.sendRequest(method, reqUri, reqBody);
+        const res : RRPCResponse = await this._client.sendRequest(method, reqUri, reqBody, "");
 
         return;
     }
@@ -60,13 +60,13 @@ class StaticServiceHandler {
     async serveStatic(filepath: string) : Promise<Uint8Array> {
 
         const method = "GET";
-        const methodPath = "/" + encodeURIComponent(filepath);
+        const methodPath = "/" + escapePathValue(filepath);
         const uri = ('/' + this._path + '/' + methodPath).replace(/\/+/g, '/');
 
         let reqUri : string = uri;
         let reqBody : string | Uint8Array | FormData | null = null;
 
-        const res : RRPCResponse = await this._client.sendRequest(method, reqUri, reqBody);
+        const res : RRPCResponse = await this._client.sendRequest(method, reqUri, reqBody, "");
 
         const ret : Uint8Array = new Uint8Array(await res.response.arrayBuffer());
 

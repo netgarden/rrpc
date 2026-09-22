@@ -93,7 +93,7 @@ func (h *{{ firstLetterToUpper $service.Name }}ServiceHandler) handle{{ firstLet
 	{{ end -}}
 
     {{ if and (eq (len $method.Outputs) 1) (eq (index $method.Outputs 0).Type "bytes") -}}
-    w1 := rrpc.NewResponseWriter(ctx.Response(), "application/octet-stream")
+    w1 := rrpc.NewResponseWriter(ctx.Response(), "{{ $method.ResponseContentType }}")
 
     {{ end -}}
 
@@ -121,7 +121,7 @@ func (h *{{ firstLetterToUpper $service.Name }}ServiceHandler) handle{{ firstLet
 
 	{{ else if eq (index $method.Outputs 0).Type "bytes" }}
         if ctx.Response().Header().Get("Content-Type") == "" {
-            ctx.Response().Header().Set("Content-Type", "application/octet-stream")
+            ctx.Response().Header().Set("Content-Type", "{{ $method.ResponseContentType }}")
         }
 
 	{{- end}}
