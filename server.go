@@ -8,6 +8,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 )
 
 const ServiceNameCtxKey = "rrpc-service"
@@ -56,6 +57,7 @@ type Server struct {
 	middlewares []Middleware
 	onRequest   func(w http.ResponseWriter, r *http.Request) error
 	onError     func(r *http.Request, err *RRPCError)
+	observers   []ResponseObserver
 }
 
 func (s *Server) Use(middlewares ...Middleware) {
@@ -100,30 +102,51 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// by the deferred recover, which must not attempt to write a JSON
 	// error body to a connection that's no longer a normal ResponseWriter.
 	var rrpcCtx *Context
+
+	if len(s.observers) > 0 {
+		start := time.Now()
+		rec := &recorder{ResponseWriter: w}
+		w = rec
+		var route string
+		// Deferred first so it runs last, after recoverPanic has written
+		// the 500 for a panicking handler (recoverPanic then re-panics,
+		// and defers still run).
+		defer func() {
+			info := rec.info(route, time.Since(start))
+			for _, observe := range s.observers {
+				observe(r, info)
+			}
+		}()
+		defer s.recoverPanic(w, r, &rrpcCtx)
+		rrpcCtx, route = s.coreHandle(w, r)
+		return
+	}
+
 	defer s.recoverPanic(w, r, &rrpcCtx)
-	rrpcCtx = s.coreHandle(w, r)
+	rrpcCtx, _ = s.coreHandle(w, r)
 }
 
-func (s *Server) coreHandle(w http.ResponseWriter, r *http.Request) *Context {
+// coreHandle also returns the matched route's template ("" if none matched).
+func (s *Server) coreHandle(w http.ResponseWriter, r *http.Request) (*Context, string) {
 	ctx := r.Context()
 
 	if s.onRequest != nil {
 		if err := s.onRequest(w, r); err != nil {
 			s.sendErrorJSON(w, r, toRRPCError(err))
-			return nil
+			return nil, ""
 		}
 	}
 
-	rrpcCtx, err := s.handle(ctx, w, r)
+	rrpcCtx, route, err := s.handle(ctx, w, r)
 
 	if err != nil && (rrpcCtx == nil || !rrpcCtx.Hijacked()) {
 		s.sendErrorJSON(w, r, toRRPCError(err))
 	}
 
-	return rrpcCtx
+	return rrpcCtx, route
 }
 
-func (s *Server) handle(ctx context.Context, w http.ResponseWriter, r *http.Request) (*Context, error) {
+func (s *Server) handle(ctx context.Context, w http.ResponseWriter, r *http.Request) (*Context, string, error) {
 
 	requestMethod := r.Method
 	requestUri := r.URL.Path
@@ -149,7 +172,7 @@ func (s *Server) handle(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	}
 
 	if matched == nil {
-		return nil, ErrRrpcBadRoute.WithCausef("no rrpc method defined for path %v", r.URL.Path)
+		return nil, "", ErrRrpcBadRoute.WithCausef("no rrpc method defined for path %v", r.URL.Path)
 	}
 
 	params := NewParams()
@@ -167,7 +190,7 @@ func (s *Server) handle(ctx context.Context, w http.ResponseWriter, r *http.Requ
 
 			paramStrValue := submatch[i]
 			if err := processParam(params, param, paramStrValue); err != nil {
-				return nil, err
+				return nil, matched.template, err
 			}
 		}
 	}
@@ -185,7 +208,7 @@ func (s *Server) handle(ctx context.Context, w http.ResponseWriter, r *http.Requ
 			// too (as this used to) both duplicates that and - since nothing
 			// stopped the handler from still running afterward - produced a
 			// corrupted, doubly-written response.
-			return nil, ErrRrpcBadRequest.WithCausef("unsupported Content-Type %q (only %s is allowed)", r.Header.Get(ContentTypeHeader), matched.method.ContentType)
+			return nil, matched.template, ErrRrpcBadRequest.WithCausef("unsupported Content-Type %q (only %s is allowed)", r.Header.Get(ContentTypeHeader), matched.method.ContentType)
 		}
 	}
 
@@ -203,7 +226,7 @@ func (s *Server) handle(ctx context.Context, w http.ResponseWriter, r *http.Requ
 		}
 	}
 
-	return rrpcCtx, handler(rrpcCtx)
+	return rrpcCtx, matched.template, handler(rrpcCtx)
 }
 
 func (s *Server) createContext(ctx context.Context, w http.ResponseWriter, r *http.Request, params *Params) *Context {

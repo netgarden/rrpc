@@ -318,6 +318,19 @@ srv.SetOnRequest(func(w http.ResponseWriter, r *http.Request) error {
 http.ListenAndServe(":8080", srv)
 ```
 
+To measure traffic (metrics, access logs) register a `ResponseObserver`. It is called once per request after the response is written, for every response the server produced: errors, requests that matched no route, and WebSocket upgrades (status 101, reported when the socket closes).
+
+```go
+srv.Observe(func(r *http.Request, info rrpc.ResponseInfo) {
+    // info.Route    the matched route's path template ("/hooks/{token:string}"), "" if none matched:
+    //               safe as a metrics label, unlike r.URL.Path
+    // info.Status   the HTTP status written (200 if none)
+    // info.Bytes    response body bytes; info.Duration  time spent in ServeHTTP
+})
+```
+
+Observers must not block. The server only wraps the `ResponseWriter` (to record status and size) when an observer is registered, and the wrapper still supports hijacking and flushing. Register observers before serving.
+
 Routes are matched by specificity, not registration order: an exact/parameterized path always wins over a `{name:path}` catch-all that also matches the same request, and ties break deterministically. This means a catch-all service (e.g. serving a static UI build for any unmatched path) can safely be registered alongside specific API services in the same or a different module — it will never intermittently shadow a more specific route, regardless of which module or which entry in `ServerModule.Services()`'s map it happens to be.
 
 ### Go client usage

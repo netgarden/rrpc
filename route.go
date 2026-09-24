@@ -15,6 +15,10 @@ type route struct {
 	method         MethodHolder
 	pattern        *regexp.Regexp
 	specificity    routeSpecificity
+	// template is the service+method path with its "{name:type}"
+	// placeholders left in ("/hooks/{token:string}"), what a
+	// ResponseObserver gets as ResponseInfo.Route.
+	template string
 }
 
 // routeSpecificity ranks routes from most to least specific, so e.g. an
@@ -88,10 +92,22 @@ func newRoute(serviceHandler ServiceHandler, method MethodHolder) (route, error)
 		}
 	}
 
+	template := serviceHandler.Path().Path
+	if !strings.HasPrefix(template, "/") {
+		template = "/" + template
+	}
+	if method.Path.Path != "" {
+		if !strings.HasSuffix(template, "/") && !strings.HasPrefix(method.Path.Path, "/") {
+			template += "/"
+		}
+		template += method.Path.Path
+	}
+
 	return route{
 		serviceHandler: serviceHandler,
 		method:         method,
 		pattern:        pattern,
+		template:       template,
 		specificity: routeSpecificity{
 			hasCatchAll:   hasCatchAll,
 			paramCount:    paramCount,
