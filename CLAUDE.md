@@ -66,10 +66,10 @@ struct MyResponse {
     success bool
 }
 
-@Path("/custom/path")
+@path("/custom/path")
 service MyService {
     @method("POST")
-    @Path("/{id:string}")
+    @path("/{id:string}")
     myMethod(request MyRequest) (MyResponse)
 }
 ```

@@ -83,10 +83,10 @@ Arrays use `[]` prefix: `[]string`, `[]int`. Maps use `map[KeyType]ValueType`.
 
 ### Services
 
-A service groups related methods. Its HTTP base path defaults to the service name and can be overridden with `@Path`.
+A service groups related methods. Its HTTP base path defaults to the service name and can be overridden with `@path`. The old spelling `@Path` is still accepted (the parser reads it as `@path`), so existing definitions keep working.
 
 ```
-@Path("/auth")
+@path("/auth")
 service Auth {
     login(request LoginRequest) (LoginResponse)
     logout()
@@ -101,34 +101,34 @@ Methods define the HTTP verb, path, inputs, and output. Defaults: `POST`, path =
 service Example {
 
     @method("PUT")
-    @Path("/upload/{filename:string}")
+    @path("/upload/{filename:string}")
     upload(data bytes)
 
     @method("PUT")
-    @Path("/uploadJSON/{filename:string}")
+    @path("/uploadJSON/{filename:string}")
     @RequestContentType("application/json")
     uploadJSON(data bytes)
 
     @method("POST")
-    @Path("/uploadWithInfo")
+    @path("/uploadWithInfo")
     @RequestContentType("application/pdf")
     uploadWithInfo(info UploadInfo, data bytes)
 
     @method("GET")
-    @Path("/download/{filename:string}")
+    @path("/download/{filename:string}")
     download() bytes
 
     @method("GET")
-    @Path("/downloadPDF/{filename:string}")
+    @path("/downloadPDF/{filename:string}")
     @ResponseContentType("application/pdf")
     downloadPDF() bytes
 
     @method("POST")
-    @Path("/search")
+    @path("/search")
     search(query SearchRequest) (SearchResponse)
 
     @method("GET")
-    @Path("/echo")
+    @path("/echo")
     echo(params EchoRequest) (EchoResponse)
 
 }

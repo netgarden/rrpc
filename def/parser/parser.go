@@ -705,6 +705,16 @@ func (p *Parser) parseField(lex *lexer.Reader, withName bool) (*def.Field, error
 	return def.NewField(fieldName, fieldType), nil
 }
 
+// canonicalAnnotationName maps a spelling found in a .rrpc file to the name the rest of the code uses.
+// @Path is the old spelling of @path (annotations are lower case); both are accepted, so existing
+// definitions keep working, and only "path" is seen after parsing.
+func canonicalAnnotationName(name string) string {
+	if name == "Path" {
+		return "path"
+	}
+	return name
+}
+
 func (p *Parser) readAnnotations(lex *lexer.Reader) ([]*def.Annotation, error) {
 
 	ret := make([]*def.Annotation, 0)
@@ -738,7 +748,7 @@ func (p *Parser) readAnnotation(lex *lexer.Reader) (*def.Annotation, error) {
 		return nil, nil
 	}
 
-	annotation := def.NewAnnotation(item.Literal)
+	annotation := def.NewAnnotation(canonicalAnnotationName(item.Literal))
 
 	if p.skipLexItem(lex, lexer.BO) {
 

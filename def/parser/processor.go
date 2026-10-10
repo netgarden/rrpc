@@ -69,8 +69,8 @@ func (p *Processor) sourceOriginToSource(module *def.Module, sourceOrigin *def.S
 	for _, serviceDef := range sourceOrigin.Services {
 
 		serviceDef.Path = serviceDef.Name
-		if p.hasAnnotation(serviceDef.Annotations, "Path") {
-			serviceDef.Path = p.getAnnotationValue(serviceDef.Annotations, "Path")
+		if p.hasAnnotation(serviceDef.Annotations, "path") {
+			serviceDef.Path = p.getAnnotationValue(serviceDef.Annotations, "path")
 		}
 
 		serviceDef.Source = source
@@ -79,8 +79,8 @@ func (p *Processor) sourceOriginToSource(module *def.Module, sourceOrigin *def.S
 		for _, methodDef := range serviceDef.Methods {
 
 			methodDef.Path = methodDef.Name
-			if p.hasAnnotation(methodDef.Annotations, "Path") {
-				methodDef.Path = p.getAnnotationValue(methodDef.Annotations, "Path")
+			if p.hasAnnotation(methodDef.Annotations, "path") {
+				methodDef.Path = p.getAnnotationValue(methodDef.Annotations, "path")
 			}
 
 			// @Stream/@InputStream/@OutputStream are mutually exclusive
