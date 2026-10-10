@@ -492,3 +492,6 @@ cd test && go run ./cmd/server/
 # rrpc-test web frontend
 cd test/web && npm run dev
 ```
+## License
+
+Apache License 2.0, see [LICENSE](LICENSE).
